@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>📋 보드 | BOARD-TITLE</title>
+<title>📋 작업 보드 | BOARD-TITLE</title>
 <!--
-  board — 행(앱/리포/타입) × 열(시간) 격자에 카드를 놓는 프로젝트 진행판.
-  데이터는 전부 아티팩트 db(meta/board · meta/sync · cards/<id>)에 있고 이 파일은 프로젝트마다 그대로 게시한다.
+  board — 행(앱/리포/타입) × 열(시간) 격자에 카드를 놓는 프로젝트 진행판 + 같은 페이지의 런북 탭.
+  데이터는 전부 아티팩트 db(meta/board · meta/sync · cards/<id> · meta/runbook · runbook/<절id>)에 있고 이 파일은 프로젝트마다 그대로 게시한다.
   스키마·쓰기 주체 규칙은 skills/board/schema.md. ORDER/STAGES 블록은 scripts/lib 복제본이다(테스트가 동일성 검사).
   `?demo`로 열면 내장 샘플로 렌더한다(로컬 검증용).
 -->
@@ -270,8 +270,24 @@
   .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--paper); font-size: 12.5px; font-weight: 600; padding: 9px 16px; border-radius: 999px; box-shadow: 0 8px 24px rgba(15,20,27,.2); opacity: 0; pointer-events: none; transition: opacity .15s; }
   .toast.show { opacity: 1; }
   .toast.bad { background: var(--bad); }
+  /* 좁은 화면 — 상단 바 버튼이 폭을 넘으므로 잘리지 않게 가로 스크롤로 둔다 */
+  @media (max-width: 720px) { .bar { overflow-x: auto; scrollbar-width: none; } .bar::-webkit-scrollbar { display: none; } .bar > * { flex: none; } .bar h1 { max-width: 44vw; } .bar .sp { flex: 1 0 0; } }
   @media (max-width: 720px) { .wrap.panel-open { grid-template-columns: 0 1fr; } .wrap.panel-open .grid { display: none; } .bar { gap: 8px; padding: 0 10px; } .bar .sync { display: none; } :root { --rowhead: 120px; --colmin: 220px; } }
   @media (prefers-reduced-motion: reduce) { .wrap { transition: none; } }
+
+  /* ── 탭 · 런북 ── */
+  [hidden] { display: none !important; }
+  .bar .tabs { margin-left: 0; }
+  body.tab-doc .bar .bo { display: none; }
+  body:not(.tab-doc) .bar .do { display: none; }
+  .docview { overflow: auto; min-height: 0; height: 100%; background: var(--paper); overscroll-behavior: contain; }
+  .docview .rb-empty { padding: 48px 24px; color: var(--muted); font-size: 14px; }
+  .docview .rb-miss { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  /* 런북의 넓은 화면 레일(position: fixed)은 페이지 최상단 기준이라 보드 상단 바에 가린다 — 바 아래로 내린다 */
+  @media (min-width: 1600px) { #docview #rb .col .toc { top: calc(var(--barh) + 24px); max-height: calc(100vh - var(--barh) - 60px); } }
+  #docview #rb .rb-flash { animation: rbflash 1.8s ease-out; }
+  @keyframes rbflash { 0%, 50% { box-shadow: 0 0 0 3px var(--signal); background: var(--signal-soft); } 100% { box-shadow: none; } }
+  @media (prefers-reduced-motion: reduce) { #docview #rb .rb-flash { animation: none; outline: 2px solid var(--signal); } }
 </style>
 </head>
 <body>
@@ -300,21 +316,25 @@
 </svg>
 <header class="bar">
   <h1 id="ttl">보드</h1>
+  <div class="seg tabs" id="tabs" role="tablist" aria-label="보기 전환" hidden><button role="tab" data-tab="board" title="행 × 시간 격자">진행</button><button role="tab" data-tab="doc" id="tab-doc" title="이어받기·절차·결정 로그">런북</button></div>
   <span id="status" class="badge dim">연결 중</span>
   <span class="sp"></span>
   <span class="sync" id="syncinfo"></span>
-  <div class="grp" aria-label="카드 필터"><span class="gl"><svg class="ic"><use href="#i-filter"/></svg>필터</span>
+  <div class="grp bo" aria-label="카드 필터"><span class="gl"><svg class="ic"><use href="#i-filter"/></svg>필터</span>
     <button class="tog" id="f-mine" title="담당이 나이고 아직 안 끝난 카드만 보인다">내 몫<span class="n"></span></button>
     <button class="tog" id="f-done" title="완료된 카드를 감춘다 (카드 단위)">완료 카드 숨김</button>
   </div>
-  <div class="grp" aria-label="격자 배치"><span class="gl"><svg class="ic"><use href="#i-fold-vertical"/></svg>접기</span>
+  <div class="grp bo" aria-label="격자 배치"><span class="gl"><svg class="ic"><use href="#i-fold-vertical"/></svg>접기</span>
     <button class="tog" id="f-fold" title="카드가 전부 완료된 열·행을 한 줄로 접는다 (열·행 단위). 「미정」 열은 비어 있으면 접힌다. 열·행 머리의 화살표로 낱개로도 접힌다">완료된 행·열</button>
   </div>
+  <div class="grp do" aria-label="런북">
+    <button class="tog ib" id="rb-ask" title="Claude에게 묻기 — 선택한 문장(없으면 지금 보는 절)에 코멘트 창을 엽니다" hidden><svg class="ic"><use href="#i-ask"/></svg>묻기</button>
+  </div>
   <div class="grp" aria-label="패널">
-    <button class="tog ib" id="f-arch" title="보관함 — 보관한 카드 목록"><svg class="ic"><use href="#i-archive"/></svg>보관<span class="n"></span></button>
+    <button class="tog ib bo" id="f-arch" title="보관함 — 보관한 카드 목록"><svg class="ic"><use href="#i-archive"/></svg>보관<span class="n"></span></button>
     <button class="tog ib icon-only" id="theme" title="테마: 시스템 / 라이트 / 다크"><svg class="ic"><use href="#i-sun"/></svg></button>
   </div>
-  <div class="seg" id="mode" title="조회: 보기·묻기·복사만 · 편집: 드래그·단계·패널 편집">
+  <div class="seg bo" id="mode" title="조회: 보기·묻기·복사만 · 편집: 드래그·단계·패널 편집">
     <button data-mode="view"><svg class="ic"><use href="#i-eye"/></svg>조회</button><button data-mode="edit"><svg class="ic"><use href="#i-pencil"/></svg>편집</button>
   </div>
 </header>
@@ -322,6 +342,7 @@
   <div class="grid" id="grid" aria-label="진행판"></div>
   <aside class="panel" id="panel" aria-label="편집"></aside>
 </div>
+<main class="docview" id="docview" aria-label="런북" hidden><style id="rbcss"></style><div id="rb"></div></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="tip" id="tip" role="tooltip"></div>
 
@@ -424,7 +445,8 @@ function linkLabel(u) {
 // ───────────────────────── State ─────────────────────────
 const S = {
   meta: null, sync: null, cards: new Map(), db: null, user: null, demo: false, ready: false,
-  ui: { panel: null, mine: false, hideDone: false, readOnly: false, pending: new Set(), drag: null, deferred: null, fold: new Set(), foldRows: new Set(), unfold: new Set(), unfoldRows: new Set(), autoFold: false, foldLoaded: false, viewMode: true },
+  rb: { meta: null, secs: new Map(), sig: "", css: "" },
+  ui: { tab: "board", rbTarget: null, panel: null, mine: false, hideDone: false, readOnly: false, pending: new Set(), drag: null, deferred: null, fold: new Set(), foldRows: new Set(), unfold: new Set(), unfoldRows: new Set(), autoFold: false, foldLoaded: false, viewMode: true },
 };
 const displayStage = (c) => c.type === "pr" ? (c.probe?.stage || c.stage || "todo") : (c.stage || STAGES[c.type]?.[0] || "");
 const cardDone = (c) => isDone(c.type, displayStage(c));
@@ -522,7 +544,7 @@ const Theme = (() => {
   const os = () => (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   let cur = os();
   try { const v = localStorage.getItem("board-theme"); if (v === "light" || v === "dark") cur = v; } catch (_) {}
-  const apply = () => { document.documentElement.setAttribute("data-theme", cur); $("#theme").innerHTML = `<svg class="ic"><use href="#i-${icon[cur]}"/></svg>`; $("#theme").title = `테마: ${name[cur]} — 누르면 ${name[cur === "light" ? "dark" : "light"]}`; };
+  const apply = () => { document.documentElement.setAttribute("data-theme", cur); $("#rb").setAttribute("data-theme", cur); $("#theme").innerHTML = `<svg class="ic"><use href="#i-${icon[cur]}"/></svg>`; $("#theme").title = `테마: ${name[cur]} — 누르면 ${name[cur === "light" ? "dark" : "light"]}`; };
   $("#theme").addEventListener("click", () => { cur = cur === "light" ? "dark" : "light"; try { localStorage.setItem("board-theme", cur); } catch (_) {} apply(); });
   apply();
   return { apply };
@@ -548,6 +570,9 @@ const Store = {
       if (S.ui.drag) { S.ui.deferred = snap; return; }
       Store.applyCards(snap);
     }, (e) => { banner("cards 구독 실패: " + e.code, "bad"); });
+    // 런북 — 에이전트만 쓴다(runbook-publish). 페이지는 읽기만 한다
+    db.doc("meta/runbook").onSnapshot((snap) => { S.rb.meta = snap.exists ? snap.data() : null; Doc.changed(); }, () => {});
+    db.collection("runbook").onSnapshot((snap) => { const m = new Map(); for (const d of snap.docs) { const x = d.data(); if (x) m.set(d.id, x); } S.rb.secs = m; Doc.changed(); }, () => {});
   },
   applyCards(snap) {
     const next = new Map();
@@ -558,6 +583,9 @@ const Store = {
   },
   loadDemo() {
     S.meta = clone(DEMO.meta); S.sync = clone(DEMO.sync); S.cards = new Map(DEMO.cards.map((c) => [c.id, clone(c)])); S.ready = true; Render.all();
+    // 로컬 검증용 — 실제 게시 계획(runbook-publish plan의 docs/*.json)을 window.__BOARD_DEMO_RUNBOOK__ = {meta, secs}로 끼워 넣을 수 있다
+    const dr = window.__BOARD_DEMO_RUNBOOK__ || DEMO.runbook;
+    S.rb.meta = clone(dr.meta); S.rb.secs = new Map(dr.secs.map((x) => [x.id, clone(x)])); Doc.changed();
   },
   // 카드 부분 갱신. 낙관 반영은 호출자가 이미 했고, 실패하면 revert()를 부른다.
   async update(id, patch, revert) {
@@ -603,7 +631,7 @@ function banner(text, cls) { let b = $("#banner"); if (!b) { b = document.create
 const Render = {
   all() { Render.bar(); Render.grid(); Render.panel(); },
   bar() {
-    $("#ttl").textContent = S.meta?.title || document.title.replace(/^📋 보드 \| /, "");
+    $("#ttl").textContent = S.meta?.title || document.title.replace(/^📋 [^|]*\| /, "");
     const mine = [...S.cards.values()].filter((c) => !c.archived && c.owner?.kind === "me" && !cardDone(c)).length;
     const arch = [...S.cards.values()].filter((c) => c.archived).length;
     $("#f-mine").classList.toggle("on", S.ui.mine); $("#f-mine .n").textContent = mine || "";
@@ -718,7 +746,11 @@ const Render = {
       const warn = "";   // 실측 실패는 카드에 안 보인다 — 읽는 사람에게 뜻이 없다. 패널 「티켓」 칸과 sync 보고에만 남긴다.
       lnks.push((href ? `<a href="${esc(href)}" target="_blank" rel="noopener" title="${esc(tip)}">${ic("ticket")}${esc(key)}</a>` : `<span title="${esc(tip)} · 보드 설정에 Jira 주소(jiraBase)가 없어 링크를 못 만듭니다">${ic("ticket")}${esc(key)}</span>`) + warn);
     }
-    for (const u of (c.links || []).slice(0, 4)) lnks.push(`<a href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}">${ic(/atlassian\.net\/wiki|notion\.|docs\.google|claude\.ai\/(code\/)?artifact/.test(u) ? "doc" : "ext")}${esc(linkLabel(u))}</a>`);
+    for (const u of (c.links || []).slice(0, 4)) {
+      const rb = rbRef(u);
+      if (rb != null) { lnks.push(`<a href="${esc(u)}" data-rb="${esc(rb)}" title="런북 탭에서 열기">${ic("doc")}${esc(Doc.label(rb))}</a>`); continue; }
+      lnks.push(`<a href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}">${ic(/atlassian\.net\/wiki|notion\.|docs\.google|claude\.ai\/(code\/)?artifact/.test(u) ? "doc" : "ext")}${esc(linkLabel(u))}</a>`);
+    }
     if (chips.length) h += `<div class="chips">${chips.join("")}</div>`;
     if (lnks.length) h += `<div class="lnks">${lnks.join("")}</div>`;
     if (delay) h += `<div class="delay" title="${esc(delay.join(" · "))}"><span class="k">지연</span><span>${esc(delay.join(" · "))}</span></div>`;
@@ -769,7 +801,7 @@ const Panel = {
       ${c.type === "ask" || c.type === "infra" || c.ticket ? `<div class="f"><label>티켓</label><input name="ticket" value="${esc(c.ticket?.key || c.ticket?.url || "")}" placeholder="ISE-1624 또는 GitHub Issue URL" ${ro}>${c.probe?.ticket ? `<div class="ro" style="margin-top:4px">${c.probe.ticket.ok === false ? "실측 실패 · " : ""}<b>${esc(c.probe.ticket.status || "—")}</b>${c.probe.ticket.assignee ? " · " + esc(c.probe.ticket.assignee) : ""} · ${esc(fmtAt(c.probe.ticket.at))}</div>` : ""}</div>` : ""}
       <div class="f"><label>메모 (카드에는 한 줄만 보입니다)</label><textarea name="note" ${ro}>${esc(c.note || "")}</textarea></div>
       <div class="f"><label>지연 사유</label><input name="delayNote" value="${esc(c.delayNote || "")}" placeholder="비우면 자동 판정만 표시 (기한 · 열 기간 · 막힘)" ${ro}>${delayOf(c) ? `<div class="help">지금 표시: ${esc(delayOf(c).join(" · "))}</div>` : ""}</div>
-      <div class="f"><label>링크 (한 줄에 하나)</label><textarea name="links" ${ro}>${esc((c.links || []).join("\n"))}</textarea></div>
+      <div class="f"><label>링크 (한 줄에 하나)</label><textarea name="links" ${ro}>${esc((c.links || []).join("\n"))}</textarea><div class="help">런북 위치는 <span class="mono">#runbook/a1</span> · 결정 한 건은 <span class="mono">#runbook/c-84</span></div></div>
       <div class="f"><label>막는 카드 (blockedBy)</label><div class="blist">${others.map((o) => `<label style="--c:var(--c-${esc(o.type)})"><input type="checkbox" name="blockedBy" value="${esc(o.id)}" ${(c.blockedBy || []).includes(o.id) ? "checked" : ""} ${ro}><span class="k">${esc(TYPE_LABEL[o.type] || o.type)}</span><span>${esc(o.title)}</span>${cardDone(o) ? `<span class="k" style="color:var(--faint)">완료</span>` : ""}</label>`).join("") || `<div class="help">다른 카드가 없습니다.</div>`}</div></div>
       ${isPr && c.probe?.pr ? `<div class="f"><label>실측 근거</label><div class="ro">state <b>${esc(c.probe.pr.state)}</b>${c.probe.pr.isDraft ? " · draft" : ""} · decision <b>${esc(c.probe.pr.decision || "—")}</b> · 타인 리뷰 <b>${esc(c.probe.pr.otherReviews ?? 0)}</b> · 코멘트 <b>${esc(c.probe.pr.otherComments ?? 0)}</b>${c.probe.branch ? ` · 브랜치 ${c.probe.branch.exists ? "있음" : "없음"}` : ""}</div></div>` : ""}
       <div class="f"><div class="help mono">만든 날 ${esc(fmtAt(c.createdAt))} · 수정 ${esc(fmtAt(c.updatedAt))}</div></div>
@@ -869,6 +901,101 @@ function archiveCard(id, flag) {
   if (flag) Panel.close(); else Render.all();
 }
 
+
+// ───────────────────────── 런북 탭 ─────────────────────────
+// 런북 HTML은 절 단위로 DB에 있다(meta/runbook: 머리말·CSS·절 순서, runbook/<절id>: 본문). CSS는 게시 스크립트가 #rb 아래로 가둬 두었다.
+// 런북 안 스크립트는 게시 때 빠진다 — 목차 강조·앵커 이동은 여기서 한다(스크롤 주체가 창이 아니라 #docview다).
+// 카드 링크 "#runbook/<id>" → 런북 탭의 그 절(또는 "c-84"처럼 결정 한 건)
+const rbRef = (u) => { const m = String(u || "").match(/^#runbook(?:\/(.*))?$/); return m ? decodeURIComponent(m[1] || "") : null; };
+const Doc = {
+  label(id) {
+    const L = S.rb.meta?.label || "런북", order = S.rb.meta?.order || [];
+    if (!id) return L;
+    const sec = order.find((o) => o.id === id); if (sec) return `${L} ${sec.num || id.toUpperCase()}`;
+    const m = id.match(/^(.+)-(\d+)$/), p = m && order.find((o) => o.id === m[1]);
+    if (p) return `${L} ${p.num || p.id.toUpperCase()} #${m[2]}`;
+    return `${L} ${id}`;
+  },
+  changed() {
+    const has = !!S.rb.meta;
+    $("#tabs").hidden = !has;
+    if (has) $("#tab-doc").textContent = S.rb.meta.label || "런북";
+    if (!has && S.ui.tab === "doc") setTab("board");
+    if (has && S.ui.rbTarget != null && S.ui.tab !== "doc") setTab("doc", S.ui.rbTarget);
+    if (S.ui.tab === "doc") Doc.render();
+    Render.tabs();
+    // 카드 링크 라벨(「런북 C #84」)이 절 번호를 쓰므로 순서가 바뀌면 격자도 다시 그린다
+    if (S.ready && S.meta) Render.grid();
+  },
+  render() {
+    const m = S.rb.meta, host = $("#rb"), dv = $("#docview");
+    if (!m) { host.innerHTML = `<div class="rb-empty">런북이 아직 게시되지 않았습니다.</div>`; S.rb.sig = ""; return; }
+    const order = m.order || [];
+    const sig = [m.hash, m.updatedAt, ...order.map((o) => `${o.id}:${S.rb.secs.get(o.id)?.hash || "-"}`)].join("|");
+    if (sig !== S.rb.sig) {
+      if (S.rb.css !== m.css) { $("#rbcss").textContent = m.css || ""; S.rb.css = m.css; }
+      const open = new Set([...host.querySelectorAll("details[open]")].map((d) => d.closest("section")?.id + ":" + [...d.closest("section")?.querySelectorAll("details") || []].indexOf(d)));
+      const st = dv.scrollTop;
+      host.innerHTML = (m.head || "") + order.map((o) => S.rb.secs.get(o.id)?.html || `<section id="${esc(o.id)}"><p class="rb-miss">${esc(o.num || o.id)} ${esc(o.title || "")} — 불러오는 중</p></section>`).join("\n") + (m.foot || "");
+      // 다시 그려도 사용자가 펼쳐 둔 접이식은 유지한다
+      for (const k of open) { const [sid, i] = k.split(":"); const d = host.querySelectorAll(`section[id="${CSS.escape(sid)}"] details`)[Number(i)]; if (d) d.open = true; }
+      dv.scrollTop = st; S.rb.sig = sig;
+    }
+    if (S.ui.rbTarget != null) { const t = S.ui.rbTarget; if (!t || Doc.go(t)) S.ui.rbTarget = null; }
+    Doc.pick();
+  },
+  // 대상으로 스크롤. 접힌 <details> 안이면 펼치고, 잠깐 강조한다. 못 찾으면 false(아직 안 불러왔을 수 있다)
+  go(id) {
+    const el = $("#rb").querySelector("#" + CSS.escape(id)); if (!el) { if (S.rb.secs.size && S.rb.meta) toast(`런북에 ${id} 위치가 없습니다`, true); return !!(S.rb.secs.size && S.rb.meta); }
+    for (let d = el.parentElement?.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
+    el.scrollIntoView({ block: "start" });
+    if (!el.matches("section")) { el.classList.remove("rb-flash"); void el.offsetWidth; el.classList.add("rb-flash"); }
+    Doc.lock = Date.now() + 800; Doc.mark(el.closest("section")?.id);
+    return true;
+  },
+  lock: 0,
+  mark(id) { $("#rb").querySelectorAll('.toc a[href^="#"]').forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + id)); },
+  // 현재 절 = 목차 바 바로 아래 줄을 품은 절. 끝에 닿으면 마지막 절
+  pick() {
+    if (Date.now() < Doc.lock) return;
+    const dv = $("#docview"), host = $("#rb"), secs = [...host.querySelectorAll(":scope section[id]")].filter((s) => !s.parentElement.closest("section"));
+    if (!secs.length) return;
+    if (dv.scrollTop + dv.clientHeight >= dv.scrollHeight - 2) return Doc.mark(secs.at(-1).id);
+    const toc = host.querySelector(".toc"), top = dv.getBoundingClientRect().top, barH = toc && getComputedStyle(toc).position !== "fixed" ? toc.offsetHeight : 0;
+    let cur = secs[0]; for (const s of secs) if (s.getBoundingClientRect().top - top <= barH + 24) cur = s;
+    Doc.mark(cur.id);
+  },
+  current() { const a = $("#rb").querySelector(".toc a.on"); const id = a && a.getAttribute("href").slice(1); return (id && $("#rb").querySelector("#" + CSS.escape(id))) || $("#rb").querySelector("section"); },
+};
+function setTab(tab, target) {
+  if (tab === "doc" && !S.rb.meta) { if (target != null) S.ui.rbTarget = target; return; }
+  S.ui.tab = tab; if (target != null) S.ui.rbTarget = target;
+  document.body.classList.toggle("tab-doc", tab === "doc");
+  $("#wrap").hidden = tab === "doc"; $("#docview").hidden = tab !== "doc";
+  $("#tip").classList.remove("show");
+  Render.tabs();
+  if (tab === "doc") Doc.render();
+}
+Render.tabs = () => {
+  $("#tabs").querySelectorAll("[data-tab]").forEach((b) => { const on = b.dataset.tab === S.ui.tab; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+  $("#rb-ask").hidden = !(S.cm || S.demo);
+};
+$("#tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
+$("#rb").addEventListener("click", (e) => {
+  const a = e.target.closest('a[href^="#"]'); if (!a) return;
+  e.preventDefault();
+  const h = a.getAttribute("href").slice(1), id = rbRef("#" + h) ?? h;
+  if (id) Doc.go(id);
+});
+$("#docview").addEventListener("scroll", () => { if (Doc.raf) return; Doc.raf = requestAnimationFrame(() => { Doc.raf = 0; Doc.pick(); }); }, { passive: true });
+$("#rb-ask").addEventListener("click", () => {
+  const sel = window.getSelection(), r = sel && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
+  if (r && $("#rb").contains(r.commonAncestorContainer)) { if (!S.cm) return toast("claude.ai 뷰어 안에서만 동작합니다", true); S.cm.openComposer({ range: r }).catch((e2) => toast("코멘트 창 열기 실패: " + (e2?.code || e2), true)); return; }
+  const el = Doc.current(); if (el) askClaude(el);
+});
+// 첫 화면은 항상 「진행」이다. 해시가 #runbook…이면 그 위치의 런북으로 연다(뷰어가 해시를 넘겨줄 때만)
+{ const r = rbRef(location.hash); if (r != null) S.ui.rbTarget = r; }
+
 // ───────────────────────── DnD (pointer) ─────────────────────────
 const DnD = (() => {
   let cand = null, raf = 0, lastXY = null;
@@ -942,6 +1069,7 @@ const DnD = (() => {
 // ───────────────────────── 이벤트 위임 ─────────────────────────
 $("#grid").addEventListener("click", (e) => {
   const st = e.target.closest(".steps button"); if (st) { const card = st.closest(".card"); setStage(card.dataset.id, st.dataset.stage); return; }
+  const rl = e.target.closest("a[data-rb]"); if (rl) { e.preventDefault(); setTab("doc", rl.dataset.rb); return; }
   if (e.target.closest("a")) return;
   const to = e.target.closest(".blk .to"); if (to) { const el = $("#grid").querySelector(`.card[data-id="${to.dataset.to}"]`); if (!el) { toast("막는 카드가 접힌 열이나 숨김 안에 있습니다", true); return; } el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); return; }
   const ab = e.target.closest(".ab"); if (ab) { const card = ab.closest(".card"); if (ab.dataset.ask !== undefined) askClaude(card); else copyContext(card.dataset.id); return; }
@@ -992,7 +1120,7 @@ const DEMO = (() => {
   const mk = (id, type, title, row, col, ord, extra = {}) => ({ id, type, title, note: "", links: [], owner: { kind: "me", name: "" }, due: null, blockedBy: [], blockedAt: null, archived: false, branch: null, pr: null, target: null, ticket: null, stage: STAGES[type][0], pos: { row, col, ord }, probe: null, createdAt: "2026-09-10T01:00:00Z", updatedAt: "2026-09-18T01:00:00Z", ...extra });
   const cards = [
     mk("c1", "pr", "#805 HANPASS provider · 파트너 세션 계약", "r_api", "p0", "V", { pr: "https://github.com/example/repo/pull/805", probe: { stage: "merged", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 805, state: "MERGED", isDraft: false, decision: "APPROVED", otherReviews: 2, otherComments: 1 } } }),
-    mk("c2", "pr", "#813 월렛 결제 게이트웨이·서명기·콜백", "r_svc", "p1", "V", { pr: "https://github.com/example/repo/pull/813", branch: "feature/phase1-payment", probe: { stage: "review", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 813, state: "OPEN", isDraft: false, decision: "", otherReviews: 1, otherComments: 6 }, branch: { exists: true } } }),
+    mk("c2", "pr", "#813 월렛 결제 게이트웨이·서명기·콜백", "r_svc", "p1", "V", { links: ["#runbook/a1", "#runbook/c-2"], pr: "https://github.com/example/repo/pull/813", branch: "feature/phase1-payment", probe: { stage: "review", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 813, state: "OPEN", isDraft: false, decision: "", otherReviews: 1, otherComments: 6 }, branch: { exists: true } } }),
     mk("c3", "pr", "환불 분기 — CancellationPolicy provider", "r_svc", "p2", "V", { branch: "feature/phase2-refund", blockedBy: ["c2", "c9"], blockedAt: "2026-09-18T01:00:00Z", probe: { stage: "todo", at: "2026-09-19T00:00:00Z", ok: true, branch: { exists: false } } }),
     mk("c4", "pr", "#821 채널 문구·FAQ·외부 링크", "r_web", "p1", "V", { pr: "https://github.com/example/repo/pull/821", probe: { stage: "draft", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 821, state: "OPEN", isDraft: true, decision: "", otherReviews: 0, otherComments: 0 } } }),
     mk("c5", "qa", "로그인 뒤 화면 대조 (결제·완료·내 예약)", "r_web", "p1", "k", { stage: "in_progress", note: "재채번 후 test-env 재배포가 먼저", blockedBy: ["c9"], blockedAt: "2026-09-18T01:00:00Z" }),
@@ -1006,7 +1134,17 @@ const DEMO = (() => {
     mk("c13", "ask", "CBT 환경 확정 — prod인지 test-env인지", "r_ext", "unset", "V", { stage: "requested", target: "Luke · Teo", ticket: { url: "https://github.com/example/repo/issues/42" }, probe: { stage: null, at: "2026-09-18T00:00:00Z", ok: false, err: "403", ticket: { url: "https://github.com/example/repo/issues/42", status: "open", at: "2026-09-17T00:00:00Z", ok: false, err: "403" } } }),
     mk("c14", "pr", "옛 브랜치 (폐기)", "r_svc", "p0", "V", { archived: true, stage: "closed" }),
   ];
-  return { meta: { schemaVersion: 1, title: "데모 · 파트너 채널 연동", ticket: "DEMO-0000", repo: "example/repo", branchPrefix: "feature/", rows, cols, updatedAt: "2026-09-19T00:00:00Z" }, sync: { at: "2026-09-19T00:00:00Z", by: "agent", probed: 5, failed: 1, schemaVersion: 1 }, cards };
+
+  // 런북 샘플 — 실제로는 runbook-publish.mjs가 CSS를 #rb 아래로 가둬 만든다
+  const rbCss = `#rb{--paper:#fff;--ink:#131b26;--muted:#4d596a;--rule:#d5dbe4;--signal:#21489f;--raise:#f5f7fa}#rb[data-theme="dark"]{--paper:#0f141b;--ink:#dee5ed;--muted:#9aa6b5;--rule:#263140;--signal:#86a8f2;--raise:#171f29}#rb .doc{background:var(--paper);color:var(--ink);font-size:15px;line-height:1.68;padding:0 24px 100px}#rb .col{max-width:900px;margin:0 auto}#rb .toc{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--rule);display:flex;gap:18px;padding:10px 0 8px;font-size:12.5px}#rb .toc a{color:var(--muted);border-bottom:2px solid transparent}#rb .toc a.on{color:var(--signal);border-bottom-color:var(--signal)}#rb section{margin-top:40px}#rb h2{font-size:19px;margin:0;border-bottom:1px solid var(--rule);padding-bottom:8px}#rb details{margin-top:12px;border-top:1px solid var(--rule)}#rb summary{cursor:pointer;color:var(--signal);padding:10px 0}#rb section,#rb [id]{scroll-margin-top:56px}#rb a{color:var(--signal)}`;
+  const runbook = { meta: { schemaVersion: 1, label: "런북", title: "데모", css: rbCss, hash: "demo",
+    head: `<div class="doc"><div class="col"><nav class="toc"><a href="#a1">A1 남은 일</a><a href="#c">C 결정 로그</a></nav><h1>데모 · 파트너 채널 연동</h1>`,
+    foot: `</div></div>`, order: [{ id: "a1", num: "A1", title: "남은 일" }, { id: "c", num: "C", title: "결정 로그" }] },
+    secs: [
+      { id: "a1", hash: "a1", html: `<section id="a1"><h2>A1 남은 일</h2><ol><li><b>#813 재리뷰 → 머지</b> — 통합 브랜치를 먼저 흘린다. 근거는 <a href="#c-2">결정 #2</a></li><li><b>환불 열기</b> — #813 머지를 기다리지 않는다</li></ol>${"<p>이어받기 서사 문단.</p>".repeat(12)}</section>` },
+      { id: "c", hash: "c", html: `<section id="c"><h2>C 결정 로그</h2><details><summary>결정 로그 (#1~#3)</summary><ul><li id="c-1"><b>#1</b> 슬러그로 시작한다</li><li id="c-2"><b>#2</b> 스택 PR은 merge 커밋으로 흘린다 — squash하면 상위 PR diff가 오염된다</li><li id="c-3"><b>#3</b> 재채번은 V50·V51</li></ul></details>${"<p>회고 백로그.</p>".repeat(20)}</section>` },
+    ] };
+  return { runbook, meta: { schemaVersion: 1, title: "데모 · 파트너 채널 연동", ticket: "DEMO-0000", repo: "example/repo", branchPrefix: "feature/", rows, cols, updatedAt: "2026-09-19T00:00:00Z" }, sync: { at: "2026-09-19T00:00:00Z", by: "agent", probed: 5, failed: 1, schemaVersion: 1 }, cards };
 })();
 
 Store.init();

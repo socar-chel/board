@@ -11,6 +11,8 @@
 | `meta/board` | 1 | 페이지(헤더 편집) · 에이전트(`new`·`import`, 사용자 지시) | 제목·행·열 정의 |
 | `meta/sync` | 1 | 에이전트만 | 마지막 실측 기록 |
 | `cards/<id>` | 카드 수 | 페이지(위치·단계·핵심 필드) · 에이전트(`probe`, 사용자 지시 시 핵심 필드) | 카드 |
+| `meta/runbook` | 0~1 | 에이전트만(`runbook`) | 런북 머리말·꼬리말·CSS·절 순서 |
+| `runbook/<절id>` | 절 수 | 에이전트만(`runbook`) | 런북 절 본문 |
 
 문서 상한 5,000 · 문서당 256KiB. 카드만 문서이므로 상한과 무관하다. 실측 이력은 DB에 쌓지 않는다(`board.json`의 git 히스토리).
 
@@ -99,6 +101,30 @@ probe.branch     { exists }
 probe.ticket     { key|url, status, assignee, title, at, ok, err }
 ```
 
+## 런북 — `meta/runbook` · `runbook/<절id>`
+
+로컬 런북 HTML(정본)을 `scripts/runbook-publish.mjs`가 쪼개 만든다. 페이지는 읽기만 하고, `meta/runbook`이 있을 때만 「런북」 탭을 보인다.
+
+```json
+// meta/runbook
+{ "schemaVersion": 1, "title": "🧾 런북 | …", "label": "런북",
+  "css": "#rb{--paper:…}#rb .doc{…}…",          // 런북의 <style> 전부를 #rb 아래로 가둔 것
+  "head": "<div class=\"doc\"><div class=\"col\"><nav class=\"toc\">…<h1>…",   // 첫 절 앞
+  "foot": "<footer>…</footer></div></div>",      // 마지막 절 뒤
+  "order": [{ "id": "a1", "num": "A1", "title": "남은 일" }, { "id": "c", "num": "C", "title": "결정 로그" }],
+  "hash": "…", "updatedAt": "…" }
+// runbook/c
+{ "id": "c", "num": "C", "title": "결정 로그", "html": "<section id=\"c\">…<li id=\"c-84\"><b>#84</b> …</section>", "hash": "…", "updatedAt": "…" }
+```
+
+- 페이지는 `head + order 순서의 절 html + foot`을 `#rb`에 그린다. `order`에 있는데 문서가 없는 절은 「불러오는 중」 자리로 둔다.
+- **CSS 스코프**: `:root`·`html`·`body` → `#rb`, 나머지 셀렉터 → `#rb <셀렉터>`. 다크 재정의(`:root[data-theme="dark"]` 등)는 `#rb[data-theme]`이 되고 페이지가 테마를 `#rb`에 맞춘다.
+  스코프가 ID라 보드 CSS의 클래스 규칙보다 항상 이긴다. 런북의 `<script>`와 HTML 주석은 게시 때 빠진다.
+- `hash`는 본문(절) 또는 머리말·CSS(meta)의 sha256 앞 16자. 게시 기록(`runbook.publish.json`, 로컬)의 값과 원격 값이 다르면 충돌이다.
+- 문서 하나는 240KiB를 넘지 못한다(상한 256KiB에서 여유를 뺀 값) — 스크립트가 거부한다.
+- 카드 → 런북 딥링크는 `links[]`의 `#runbook/<절id>` · `#runbook/<절id>-<N>`. 스키마 필드를 따로 두지 않는다.
+- `board.json` 스냅샷에는 런북이 들어가지 않는다 — 로컬 런북 파일이 정본이라 되돌릴 때는 그 파일을 다시 게시한다.
+
 ## 쓰기 주체 규칙 (last-writer-wins 대응의 핵심)
 
 `update`는 최상위 키 단위로 병합되고 중첩 객체는 재귀 병합, **배열은 통째 교체**된다. 그래서:
@@ -111,6 +137,8 @@ probe.ticket     { key|url, status, assignee, title, at, ok, err }
    버전은 `get`/`list` 결과 텍스트에만 실리고 `out_dir` 파일에는 없다 — 결과 텍스트의 `"<id>"  N bytes  version V` 줄을 파일로 남겨
    `probe-to-batch.mjs --versions`·`restore.mjs --versions`에 넘긴다. 충돌하면 그 문서만 재읽기 1회 후 재시도, 그래도 실패면 보고.
 6. 배열 필드(`links` `blockedBy` `rows` `cols`)를 에이전트가 고칠 때는 최신 값을 읽은 뒤 전체를 보낸다.
+7. **런북 문서(`meta/runbook`·`runbook/*`)는 에이전트만 쓰고 항상 `set`(전체 교체)이다** — 필드를 나눠 쓰는 다른 주체가 없다.
+   동시 게시는 문서 버전(`if_version`)과 절 hash(게시 기록 대조) 두 겹으로 막는다.
 
 ## 단계 어휘
 
@@ -135,4 +163,7 @@ probe.ticket     { key|url, status, assignee, title, at, ok, err }
 ```
 
 `scripts/snapshot.mjs`가 카드를 `pos.row(행 순서) → pos.col(열 순서) → ord`로 정렬하고 키를 고정 순서로 써서 git diff가 읽히게 한다.
-`restore`는 이 파일을 다시 DB에 쓴다(DB에만 있는 카드는 `archived:true`로 남긴다).
+`restore`는 이 파일을 다시 DB에 쓴다(DB에만 있는 카드는 `archived:true`로 남긴다). 런북은 스냅샷에 없다 — 로컬 런북 파일을 `runbook`으로 다시 게시한다.
+
+`board.json`은 로컬 백업이다. 두는 경로를 리포가 추적하면 git 히스토리가 "언제 옮겼나"에 답하지만, `.task-docs/`처럼 무시되는 경로면
+히스토리는 없고 마지막 스냅샷만 남는다.

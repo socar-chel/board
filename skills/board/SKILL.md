@@ -1,11 +1,13 @@
 ---
 name: board
-description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) 격자에 카드(PR·문서·QA·요청·인프라·결정)를 놓는 Claude 아티팩트 보드를 만들고(new), GitHub PR·브랜치·Jira/Issue 상태를 실측해 갱신하고(sync), 스냅샷을 리포에 남기고(restore), 기존 런북 매트릭스를 옮긴다(import). 사용자는 브라우저에서 드래그로, 에이전트는 ArtifactData로 같은 DB를 고친다. "/board", "진행판", "보드 만들어줘", "보드 동기화", "board sync", "카드 추가해줘", "보드에 올려줘" 키워드로 트리거.
+description: 작업 보드 — 행(앱/리포/타입) × 열(시간) 격자에 카드(PR·문서·QA·요청·인프라·결정)를 놓는 「진행」 탭과, 같은 페이지의 「런북」 탭(작업 서사·절차·결정 로그)을 가진 Claude 아티팩트를 만들고(new), GitHub PR·브랜치·Jira/Issue 상태를 실측해 갱신하고(sync), 런북 HTML을 절 단위로 게시하고(runbook), 스냅샷을 남기고(restore), 기존 런북 매트릭스를 옮긴다(import). 사용자는 브라우저에서 드래그로, 에이전트는 ArtifactData로 같은 DB를 고친다. "/board", "작업 보드", "진행판", "보드 만들어줘", "보드 동기화", "board sync", "카드 추가해줘", "보드에 올려줘", "런북 탭에 게시" 키워드로 트리거.
 ---
 
-# board — 행 × 시간 격자 진행판
+# board — 작업 보드 (진행 격자 + 런북 탭)
 
-**한 줄**: 아티팩트 HTML 한 장(`templates/board.html`) + 아티팩트 `db`. 행·열·카드는 전부 DB 문서이고,
+**한 줄**: 아티팩트 HTML 한 장(`templates/board.html`) + 아티팩트 `db`. 페이지에는 탭이 둘이다 — 「진행」(행 × 시간 격자)과
+「런북」(작업 서사를 절 단위로 게시한 문서). 상태는 진행 탭이, 서사·절차·결정 로그는 런북 탭이 정본이고 둘은 같은 내용을
+적지 않는다 — 카드는 런북의 해당 절로 가는 딥링크만 갖는다. 행·열·카드·런북 절은 전부 DB 문서이고,
 사용자는 페이지에서 드래그·패널로, 에이전트는 `ArtifactData` 도구로 같은 문서를 고친다. GitHub·Jira 실측은
 에이전트만 한다(페이지는 외부를 못 부른다). 스키마와 **누가 어떤 필드를 쓰는가**는 [schema.md](schema.md)가 정본이다.
 
@@ -21,6 +23,7 @@ description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) �
 | `/board sync [--file 경로]` | PR·브랜치·Issue·Jira 실측 → `probe` 갱신 → 스냅샷 → 보고 |
 | `/board open [--file 경로]` | 보드 열기 |
 | `/board restore <board.json>` | 스냅샷을 DB로 되돌린다(확인 후) |
+| `/board runbook <runbook.html> [--file 경로]` | 런북 HTML을 런북 탭에 게시한다(절 단위 · 충돌 검사) |
 | `/board import <runbook.html 또는 URL> [--file 경로]` | 런북 매트릭스를 카드로 옮긴다(1회성) |
 
 카드 **추가·편집은 명령이 아니라 채팅**이다("T4 행 Phase 2에 QA 카드 추가", "#813 카드를 미정으로") — 「채팅 편집 규칙」대로 쓴다.
@@ -30,17 +33,17 @@ description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) �
 - `/task`가 부를 때: `<리포 루트>/.task-docs/<티켓>/board.json`
 - 단독: `--file`이 없으면 cwd가 git 리포면 `<리포 루트>/.task-docs/<티켓|슬러그>/board.json`, 아니면 `./board.json`. 어느 쪽이든 **처음 만들 때 경로를 한 줄로 확인받는다.**
 
-`--file`이 없고 파일도 못 찾으면 `Artifact list`에서 `📋 보드 |` 제목을 찾는다. 후보가 둘 이상이면 묻는다.
+`--file`이 없고 파일도 못 찾으면 `Artifact list`에서 `📋 작업 보드 |` 제목(옛 이름 `📋 보드 |` 포함)을 찾는다. 후보가 둘 이상이면 묻는다.
 
 ## `new`
 
 1. 인자 파싱. `--start` 없으면 오늘, `--weeks` 없으면 6. `--repo` 없으면 `gh repo view --json nameWithOwner`(cwd가 리포일 때).
-2. `Artifact list`로 같은 제목의 `📋 보드 |`가 있는지 본다 — 있으면 새로 만들지 않고 그 URL을 쓴다(주제당 URL 하나).
+2. `Artifact list`로 같은 제목의 `📋 작업 보드 |`(옛 `📋 보드 |`)가 있는지 본다 — 있으면 새로 만들지 않고 그 URL을 쓴다(주제당 URL 하나).
 3. **행 정의를 한 번 묻는다**: "행을 나열해 주세요 (예: `T1 service-server`, `T4 customer-web`, `사람·외부`)". 답이 없으면 행 하나(`main`).
    행 id는 `r_` + 슬러그, `kind`(코드·인프라·QA·문서·사전 준비·외부 요청)는 이름으로 추정(`ops`·`환경`→infra, `사람`·`외부`→ask, 그 외 code),
    `sub`에 사람이 읽는 이름(리포·서비스), `label`에 좌표(T1). **QA 행(`kind: qa`, "TC 작성 · 수행")은 사용자가 말하지 않아도 기본으로 넣는다** — 없으면 QA 카드가 코드 행에 섞인다.
 4. `<skill>/templates/board.html`을 스크래치패드로 복사하고 `<title>`의 `BOARD-TITLE`을 제목으로 바꾼다. 나머지는 손대지 않는다.
-5. `Artifact` 게시: `title` `📋 보드 | <제목>`, `icon` `board`, `description` 한 줄,
+5. `Artifact` 게시: `title` `📋 작업 보드 | <제목>`, `icon` `board`, `description` 한 줄,
    `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "user": {}, "comments": {"composer_only": true}}` — 링크로 온 사내 사용자는 읽기만, 소유자·편집자만 쓴다. `comments`는 카드의 「Claude에게 묻기」 버튼이 셸 코멘트 창을 여는 데만 쓴다(composer_only라 동의 프롬프트 없음, 공개 공유 가능 유지).
 6. `ArtifactData` `batch`로 시드: `meta/board`(schema.md 형태, `cols` = `unset` + `node <scripts>/…`가 아니라 아래 규칙으로 주 단위 N개:
    `{id:"w<i>", label:"M<i>", start, end}`, 7일 간격, 첫 열 start = `--start`). 열 어휘는 **마일스톤(M0·M1…)** — "Phase"·"단계"는 쓰지 않는다(2026-09-19 사용자 결정) · `meta/sync` `{at:null, by:"agent", probed:0, failed:0, schemaVersion:1}`.
@@ -66,6 +69,36 @@ description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) �
 6. `ArtifactData get meta/sync`(버전 확보) → `update meta/sync` `{at, by:"agent", probed, failed, schemaVersion:1}` + `if_version`. 값은 batch.json의 `sync`.
 7. 다시 `get meta/board` + `list cards`(out_dir) → `assemble-dump.mjs` → `node <scripts>/snapshot.mjs --out <board.json>`.
 8. 보고 — 서식은 [references/sync-report.md](references/sync-report.md). 반드시 들어가는 것: 단계가 바뀐 카드(전 → 후), 실측 실패, `suggestions`(브랜치로 찾은 PR을 `pr` 필드에 채울지 — **사용자가 OK하면** `update {pr}` + `if_version`), **미등록 PR 목록**(카드를 만들지 않는다 — 사용자가 행을 정해주면 그때 만든다).
+
+## `runbook`
+
+런북은 **로컬 HTML 파일이 정본**이고 DB는 게시본이다(로컬 → DB 한 방향). 페이지는 런북을 읽기만 한다.
+게시할 때 스크립트가 `<section id>` 절마다 문서 하나(`runbook/<절id>`)로 쪼개고, CSS는 `#rb` 아래로 가두고, 스크립트는 뺀다
+([schema.md](schema.md) 「런북」). 페이지를 재게시하지 않으므로 런북을 몇 번 고쳐도 아티팩트 버전 충돌이 없다.
+
+게시 기록(`runbook.publish.json`)은 런북 파일 옆에 둔다 — 절마다 "내가 마지막으로 올린 hash"다. 원격 절의 hash가 이 기록과
+다르면 **다른 세션이 내 뒤에 그 절을 고친 것**이라 쓰지 않고 멈춘다(결정 번호 채번이 겹치는 사고를 여기서 막는다).
+
+1. `board.json`에서 `artifact.url`을 읽는다(없으면 「파일 위치」 탐색).
+2. 덤프: `ArtifactData get meta/runbook` + `ArtifactData list runbook`(`query.limit` 1000)을 **`out_dir: <scratch>/rb/remote`**로 받는다.
+   결과 텍스트의 `"<id>"  N bytes  version V` 줄을 `<scratch>/rb/versions.txt`에 쓴다(기존 문서 쓰기는 `if_version` 필수). 처음이면 둘 다 비어 있다.
+3. `node <scripts>/runbook-publish.mjs plan <runbook.html> --remote <scratch>/rb/remote --out-dir <scratch>/rb --versions <scratch>/rb/versions.txt --state <runbook 디렉터리>/runbook.publish.json > <scratch>/rb/plan.json`
+   - stderr: `절 N · 쓰기 N · 삭제 N · 그대로 N · 충돌 N`.
+   - **exit 3 = 충돌**: `batches`가 비어 있다. 아무것도 쓰지 않는다. `<scratch>/rb/conflicts/<id>.remote.html`(다른 세션의 본문)을
+     로컬 런북에 병합하고 — 결정 로그는 원격 항목을 살리고 내 항목 번호를 뒤로 민다 — 2단계부터 다시 한다. 절 일부만 올리지 않는다.
+   - 기록 파일이 없는데 원격이 이미 있으면(다른 머신·세션이 게시함) 원격을 받아 로컬이 그 내용을 반영했는지 확인한 뒤 `--adopt`로 다시 계획한다.
+   - 절 하나가 240KiB를 넘으면 에러다 — 그 절을 둘로 나눈다(결정 로그는 오래된 항목을 별도 절로).
+4. `plan.batches`를 순서대로 `ArtifactData batch`에 넘긴다(항목마다 `file_path`·`if_version`, `meta/runbook`은 맨 끝).
+   `version_mismatch`면 그 사이 누가 게시한 것이다 — 2단계부터 다시.
+5. 전부 성공한 뒤에만: `node <scripts>/runbook-publish.mjs commit --plan <scratch>/rb/plan.json --state <…>/runbook.publish.json --url <url>`.
+6. 보고: 쓴 절 목록 · 그대로 · 삭제 · 충돌(있었다면 무엇을 병합했나).
+
+런북 작성 규칙(페이지가 기대하는 것):
+- 최상위 `<section id>`만 절이 된다. 절 사이에 절 밖 내용이 있으면 게시가 거부된다(어느 절에도 안 실려 사라지므로).
+- **절 id는 문서 id다** — 영숫자로 시작하고 영숫자·`-`·`_`만(`a1`, `a1-1`, `c`). 바꾸면 그 절을 가리키던 카드 링크가 끊긴다.
+- "#N"으로 시작하는 목록 항목(`<li><b>#84</b> …`)에는 게시 때 `<절id>-N` 앵커가 자동으로 붙는다(결정 로그 `c-84`). 번호를 다시 매기지 않는다.
+- 런북 안의 `<script>`는 게시 때 빠진다. 목차(`nav.toc`)의 강조·앵커 이동은 페이지가 한다.
+- 상태 요약(매트릭스·「내가 할 일」·트랙 표)은 런북에 쓰지 않는다 — 진행 탭이 정본이다.
 
 ## `open`
 `board.json`의 URL로 `Artifact open`. 없으면 「파일 위치」 탐색.
@@ -113,6 +146,10 @@ description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) �
 - **문서 카드가 `draft` 이상이면 `links[]`에 문서 URL이 있어야 한다** — 카드에 링크 칩으로 보이고, 없으면 "링크 없음" 경고 칩이 뜬다. 작성 전이면 `todo`. 사용자가 "머지됐다"고 해도 `sync`로 실측한다.
 - 행·열 추가는 `meta/board.rows`/`cols` 전체 배열 `update`. `cols[0]`은 `unset` 고정.
 - 삭제 요청은 `archived:true`. 하드 삭제는 사용자가 "완전히 지워"라고 명시할 때만 `delete`.
+- **런북 딥링크** — 카드 `links[]`에 `#runbook/<절id>`(절) 또는 `#runbook/c-84`(결정 한 건)를 넣으면 「런북 C #84」 칩이 되고,
+  누르면 런북 탭의 그 위치가 열린다(접힌 결정 로그도 펼친다). 에이전트가 런북에 결정 항목·이어받기 항목을 쓸 때 **관련 카드에 같이 넣는다**
+  (배열이므로 최신 `links`를 읽고 전체를 `update` + `if_version`). `sync`는 링크를 건드리지 않는다.
+  카드 `note`에 절 좌표(A2·#67)를 적는 대신 이 링크를 쓴다.
 
 ## 보고·톤
 - 실측 시각을 항상 적는다. 실패는 숨기지 않는다("Jira 3건 실측 실패 · 403").
@@ -120,7 +157,7 @@ description: 프로젝트 진행판 — 행(앱/리포/타입) × 열(시간) �
 - 이 스킬은 개인 경로·외부 지식베이스를 참조하지 않는다. 팀에 공유해도 그대로 동작해야 한다.
 
 ## 참고
-- [schema.md](schema.md) — DB 스키마 · 단계 어휘 · 쓰기 주체
+- [schema.md](schema.md) — DB 스키마 · 단계 어휘 · 쓰기 주체 · 런북 문서
 - [references/pr-stages.md](references/pr-stages.md) — PR 단계 판정
 - [references/import-mapping.md](references/import-mapping.md) — 런북 → 카드
 - [references/sync-report.md](references/sync-report.md) — sync 보고 서식

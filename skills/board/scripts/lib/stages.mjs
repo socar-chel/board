@@ -18,6 +18,8 @@ const STAGE_LABEL = {
 const TYPE_LABEL = { pr: "PR", doc: "문서", qa: "QA", ask: "요청", infra: "인프라", decision: "결정" };
 const TYPE_ICON = { pr: "⟨/⟩", doc: "¶", qa: "✓", ask: "✉", infra: "⇪", decision: "◆" };
 function isDone(type, stage) { return (DONE[type] || []).includes(stage); }
+// 라벨은 타입의 어휘 안에서만 찾는다(복사 텍스트용 — 카드 첫 줄은 cardHTML의 unk 분기가 같은 일을 한다). qa 카드의 "done"을 ask의 "완료"로 읽어 주면 흐림 없이 글자만 "완료"인 모호한 카드가 된다.
+function stageLabel(type, stage) { if (!stage) return "—"; return (STAGES[type] || []).includes(stage) ? (STAGE_LABEL[stage] || stage) : `단계 오류 · ${stage}`; }
 function stageIndex(type, stage) { return (STAGES[type] || []).indexOf(stage); }
 /*STAGES-END*/
 
@@ -52,4 +54,4 @@ function decidePr(v) {
 }
 function decideNoPr({ branchExists }) { return { stage: branchExists ? "wip" : "todo", evidence: { branchExists: !!branchExists } }; }
 
-export { STAGES, DONE, STAGE_LABEL, TYPE_LABEL, TYPE_ICON, isDone, stageIndex, decidePr, decideNoPr, isBot };
+export { STAGES, DONE, STAGE_LABEL, TYPE_LABEL, TYPE_ICON, isDone, stageLabel, stageIndex, decidePr, decideNoPr, isBot };
