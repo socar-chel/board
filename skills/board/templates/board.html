@@ -161,7 +161,12 @@
   .card.t-pr { --c: var(--c-pr); --cs: var(--cs-pr); } .card.t-doc { --c: var(--c-doc); --cs: var(--cs-doc); } .card.t-qa { --c: var(--c-qa); --cs: var(--cs-qa); }
   .card.t-ask { --c: var(--c-ask); --cs: var(--cs-ask); } .card.t-infra { --c: var(--c-infra); --cs: var(--cs-infra); } .card.t-decision { --c: var(--c-decision); --cs: var(--cs-decision); }
   .card.done { opacity: .45; } .card.done:hover { opacity: .8; }
-  .card.delayed { border-color: color-mix(in srgb, var(--bad) 45%, var(--rule)); }
+  /* PR ready(4단계 리뷰부터) — draft를 벗어나 사람 리뷰만 남은 카드. 배경·배지로 draft 이하와 갈린다 */
+  .card.ready { background: color-mix(in srgb, var(--cs) 60%, var(--paper)); border-color: color-mix(in srgb, var(--c) 45%, var(--rule)); }
+  .card.ready:hover { border-color: var(--c); }
+  .card.ready.sel { border-color: var(--signal); }
+  .card .rdy { flex: none; font-family: var(--mono); font-size: 9px; letter-spacing: .1em; font-weight: 700; color: var(--paper); background: var(--c); border-radius: 4px; padding: 1px 5px; line-height: 13px; }
+  .card.delayed, .card.ready.delayed { border-color: color-mix(in srgb, var(--bad) 45%, var(--rule)); }
   .card.flash { animation: flash 1.2s ease-out; }
   @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--bad); } 100% { box-shadow: none; } }
   .card.ghost { opacity: .35; border-style: dashed; box-shadow: none; transform: none; }
@@ -693,7 +698,8 @@ const Render = {
   cardHTML(c) {
     const stage = displayStage(c), list = pathOf(c.type), idx = list.indexOf(stage), done = cardDone(c), blocked = isBlocked(c);
     const off = (OFFPATH[c.type] || []).includes(stage), unk = !off && idx < 0 && (STAGES[c.type] || []).length > 0, delay = delayOf(c);
-    const cls = ["card", "t-" + c.type, done ? "done" : "", blocked ? "blocked" : "", delay ? "delayed" : "", S.ui.pending.has(c.id) ? "pending" : "", S.ui.panel?.kind === "card" && S.ui.panel.id === c.id ? "sel" : ""].filter(Boolean).join(" ");
+    const ready = c.type === "pr" && !done && !off && idx >= 3;   // 4단계(리뷰)부터 — draft를 벗어난 PR
+    const cls = ["card", "t-" + c.type, done ? "done" : "", ready ? "ready" : "", blocked ? "blocked" : "", delay ? "delayed" : "", S.ui.pending.has(c.id) ? "pending" : "", S.ui.panel?.kind === "card" && S.ui.panel.id === c.id ? "sel" : ""].filter(Boolean).join(" ");
     const prNum = c.probe?.pr?.number || (String(c.pr || "").match(/\/pull\/(\d+)/) || [])[1] || null, prHref = c.pr || c.probe?.pr?.url || null;
     const rawTitle = c.title || "(제목 없음)";
     let titleText = rawTitle.replace(/[✅☐]/g, "").replace(/\s{2,}/g, " ").replace(/^\s*[·,]\s*|\s*[·,]\s*$/g, "").trim() || rawTitle;
@@ -720,7 +726,7 @@ const Render = {
     const statusLine = st.filter(Boolean).join(" · ");
     let noteText = c.note || "";
     if (c.type === "pr" && prNum) noteText = noteText.replace(new RegExp(`#${prNum}\\b`, "g"), "").replace(/(^|\s·\s)(\d{1,2}\/\d{1,2}\s)?(머지|draft|ready)(?=\s·\s|$)/g, "$1").replace(/^(\s*·\s*)+|(\s*·\s*)+$/g, "").replace(/(\s·\s){2,}/g, " · ").trim();
-    let h = `<div class="${cls}" data-id="${esc(c.id)}" tabindex="0"><div class="hd"><span class="tt">${esc(TYPE_LABEL[c.type] || c.type)}</span>${c.type === "infra" && ENV_LABEL[c.env] ? `<span class="env ${esc(c.env)}" title="${c.env === "prod" ? "운영 환경 — 티켓은 미리, 생성은 배포 직전" : c.env + " 환경"}">${ENV_LABEL[c.env]}</span>` : ""}<span class="st2 ${unk ? "unk" : ""}" title="${esc(statusLine)}">${esc(statusLine)}</span><span class="act">${S.cm || S.demo ? `<button class="ab" data-ask title="Claude에게 묻기 — 이 카드에 코멘트 창을 엽니다">${ic("ask")}</button>` : ""}<button class="ab" data-ctx title="카드 컨텍스트 복사 — 채팅에 붙여 넣을 텍스트">${ic("copy")}</button></span></div><div class="ttl"><span>${esc(titleText)}</span></div>${noteText ? `<div class="note" title="${esc(noteText)}">${esc(noteText)}</div>` : subTitle ? `<div class="sub" title="${esc(subTitle)}">${esc(subTitle)}</div>` : ""}${blocked ? `<div class="blk">${ic("ban")}<span class="k">Blocked</span>${(c.blockedBy || []).map((id) => S.cards.get(id)).filter((b) => b && !b.archived && !cardDone(b)).map((b) => `<button class="to" data-to="${esc(b.id)}" title="막는 카드로 이동">${esc(b.title)}</button>`).join(`<span class="sep">·</span>`)}</div>` : ""}<span class="grip" title="끌어서 이동">⋮⋮</span>`;
+    let h = `<div class="${cls}" data-id="${esc(c.id)}" tabindex="0"><div class="hd"><span class="tt">${esc(TYPE_LABEL[c.type] || c.type)}</span>${ready ? `<span class="rdy" title="PR ready — draft를 벗어나 리뷰·승인 단계">READY</span>` : ""}${c.type === "infra" && ENV_LABEL[c.env] ? `<span class="env ${esc(c.env)}" title="${c.env === "prod" ? "운영 환경 — 티켓은 미리, 생성은 배포 직전" : c.env + " 환경"}">${ENV_LABEL[c.env]}</span>` : ""}<span class="st2 ${unk ? "unk" : ""}" title="${esc(statusLine)}">${esc(statusLine)}</span><span class="act">${S.cm || S.demo ? `<button class="ab" data-ask title="Claude에게 묻기 — 이 카드에 코멘트 창을 엽니다">${ic("ask")}</button>` : ""}<button class="ab" data-ctx title="카드 컨텍스트 복사 — 채팅에 붙여 넣을 텍스트">${ic("copy")}</button></span></div><div class="ttl"><span>${esc(titleText)}</span></div>${noteText ? `<div class="note" title="${esc(noteText)}">${esc(noteText)}</div>` : subTitle ? `<div class="sub" title="${esc(subTitle)}">${esc(subTitle)}</div>` : ""}${blocked ? `<div class="blk">${ic("ban")}<span class="k">Blocked</span>${(c.blockedBy || []).map((id) => S.cards.get(id)).filter((b) => b && !b.archived && !cardDone(b)).map((b) => `<button class="to" data-to="${esc(b.id)}" title="막는 카드로 이동">${esc(b.title)}</button>`).join(`<span class="sep">·</span>`)}</div>` : ""}<span class="grip" title="끌어서 이동">⋮⋮</span>`;
     if (list.length) {
       const lock = c.type === "pr" || locked();
       h += `<div class="steps" data-type="${esc(c.type)}">`;
