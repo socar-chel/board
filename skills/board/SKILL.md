@@ -58,7 +58,10 @@ description: 작업 보드 — 행(앱/리포/타입) × 열(시간) 격자에 �
    (문서가 파일로 떨어진다). 도구 결과 텍스트의 `"<id>"  N bytes  version V` 줄들을 그대로 `<scratch>/sync/versions.txt`에 쓴다 —
    **기존 문서 `update`는 `if_version`이 필수**라(실측: 없으면 `version_mismatch`로 거부) 버전이 여기서만 나온다.
    `node <scripts>/assemble-dump.mjs <scratch>/sync --url <url> --out <scratch>/sync/dump.json`.
-3. `node <scripts>/probe-github.mjs < dump.json > probe.json` (`--repo`로 meta.repo를 덮을 수 있다). 결과:
+3. `node <scripts>/probe-github.mjs < dump.json > probe.json` (`--repo`로 meta.repo를 덮을 수 있다). **리포 안
+   (cwd가 git 리포)에서 돌린다** — 브랜치 실측이 git을 부르므로 스크래치 cwd에서는 브랜치 카드가 "깃 저장소가
+   아닙니다"로 실패한다. 카드 `pr`은 **URL 문자열**이어야 한다(schema.md) — 숫자로 넣으면 그 카드 실측이
+   `prUrl.match is not a function`으로 죽는다(2026-09-23 실측 — 채팅 편집으로 pr을 채울 때 URL로 쓴다). 결과:
    `updates[{id, probe}]` · `suggestions[{id, field, value, why}]` · `jira[{id, key}]` · `unregistered[]` · `errors[]`.
 4. **Jira**: `jira[]`의 키마다 Atlassian MCP `getJiraIssue`(cloudId는 사이트 호스트, fields: summary·status·assignee)를 부르고
    `<scratch>/sync/jira.json`에 `[{id, key, status: <status.name>, assignee: <displayName|null>, title, ok, err}]`로 쓴다.
