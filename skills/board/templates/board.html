@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>📋 보드 | BOARD-TITLE</title>
+<!--
+  board — 행(앱/리포/타입) × 열(시간) 격자에 카드를 놓는 프로젝트 진행판.
+  데이터는 전부 아티팩트 db(meta/board · meta/sync · cards/<id>)에 있고 이 파일은 프로젝트마다 그대로 게시한다.
+  스키마·쓰기 주체 규칙은 skills/board/schema.md. ORDER/STAGES 블록은 scripts/lib 복제본이다(테스트가 동일성 검사).
+  `?demo`로 열면 내장 샘플로 렌더한다(로컬 검증용).
+-->
+<style>
+  :root {
+    --paper: #ffffff; --raise: #f5f7fa;
+    --ink: #131b26; --muted: #4d596a; --faint: #788594;
+    --rule: #d5dbe4; --rule-firm: #b9c2cf;
+    --signal: #21489f; --signal-soft: #e4ebf9;
+    --good: #256549; --good-soft: #dcece4;
+    --warn: #8d5510; --warn-soft: #f4e8d6;
+    --bad: #9c352f; --bad-soft: #f6e3e1; --block: #6b4fbb;
+    --teal: #0f6b6b; --teal-soft: #d9eeee; --plum: #5d3f9e; --plum-soft: #e9e2f5; --rose: #8f3564; --rose-soft: #f4e1ea;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Pretendard", system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --rowhead: 176px; --colmin: 236px; --colfold: 44px; --barh: 44px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f141b; --raise: #171f29;
+      --ink: #dee5ed; --muted: #9aa6b5; --faint: #6f7c8c;
+      --rule: #263140; --rule-firm: #38455a;
+      --signal: #86a8f2; --signal-soft: #17233a;
+      --good: #63b591; --good-soft: #13241d;
+      --warn: #cfa057; --warn-soft: #271f13;
+      --bad: #d98a83; --bad-soft: #2b1715; --block: #b1a0ee;
+      --teal: #6fc2c2; --teal-soft: #112626; --plum: #b39be6; --plum-soft: #1f1830; --rose: #e08fb6; --rose-soft: #2c1622;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f141b; --raise: #171f29;
+    --ink: #dee5ed; --muted: #9aa6b5; --faint: #6f7c8c;
+    --rule: #263140; --rule-firm: #38455a;
+    --signal: #86a8f2; --signal-soft: #17233a;
+    --good: #63b591; --good-soft: #13241d;
+    --warn: #cfa057; --warn-soft: #271f13;
+    --bad: #d98a83; --bad-soft: #2b1715;
+    --teal: #6fc2c2; --teal-soft: #112626; --plum: #b39be6; --plum-soft: #1f1830; --rose: #e08fb6; --rose-soft: #2c1622;
+    color-scheme: dark;
+  }
+  /* 타입 색 — pr·doc·qa·ask·infra·decision */
+  :root { --c-pr: var(--signal); --cs-pr: var(--signal-soft); --c-doc: var(--teal); --cs-doc: var(--teal-soft);
+    --c-qa: var(--good); --cs-qa: var(--good-soft); --c-ask: var(--warn); --cs-ask: var(--warn-soft);
+    --c-infra: var(--plum); --cs-infra: var(--plum-soft); --c-decision: var(--rose); --cs-decision: var(--rose-soft); }
+
+  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--rule-firm) transparent; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 13.5px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; overflow: hidden; display: grid; grid-template-rows: var(--barh) 1fr; }
+  a { color: var(--signal); text-decoration: none; border-bottom: 1px solid var(--rule-firm); }
+  a:hover { border-bottom-color: var(--signal); }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .mono { font-family: var(--mono); }
+  .lab { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+
+  /* ── 상단 바 ── */
+  .bar { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--rule); background: var(--paper); min-width: 0; }
+  .bar h1 { font-size: 16px; font-weight: 700; margin: 0 6px 0 0; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .bar .sp { flex: 1; }
+  .bar .sync { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; margin-right: 6px; }
+  .bar .sync b { color: var(--muted); font-weight: 600; }
+  .bar .grp { display: flex; align-items: center; gap: 4px; padding-left: 10px; border-left: 1px solid var(--rule); }
+  .bar .gl { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); display: inline-flex; align-items: center; gap: 4px; margin-right: 2px; white-space: nowrap; }
+  .bar .gl .ic { width: 12px; height: 12px; opacity: .7; }
+  .bar .ib { display: inline-flex; align-items: center; gap: 5px; background: transparent; }
+  .bar .ib .ic { width: 14px; height: 14px; opacity: .9; }
+  .bar .ib.icon-only { padding: 5px 7px; }
+  .bar .seg { display: inline-flex; border: 1px solid var(--rule-firm); border-radius: 999px; padding: 2px; margin-left: 10px; background: var(--raise); }
+  .bar .seg button { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 3px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); white-space: nowrap; }
+  .bar .seg button .ic { width: 13px; height: 13px; }
+  .bar .seg button.on { background: var(--signal); color: var(--paper); }
+  .bar .seg button:not(.on):hover { color: var(--ink); }
+  @media (max-width: 1180px) { .bar .gl { display: none; } .bar .grp { padding-left: 6px; } }
+  .tog { font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 5px 12px; border: 1px solid transparent; border-radius: 999px; background: var(--raise); color: var(--muted); white-space: nowrap; transition: background .12s, color .12s; }
+  .tog:hover { background: var(--rule); color: var(--ink); }
+  .tog.on { color: var(--signal); background: var(--signal-soft); }
+  .tog .n { display: inline-block; min-width: 16px; text-align: center; font-family: var(--mono); font-size: 10px; color: var(--paper); background: var(--muted); border-radius: 999px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
+  .tog .n:empty { display: none; }
+  .tog.on .n { background: var(--signal); }
+  .badge { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.warn { color: var(--warn); background: var(--warn-soft); } .badge.bad { color: var(--bad); background: var(--bad-soft); }
+  .badge.dim { color: var(--faint); background: var(--raise); } .badge.info { color: var(--signal); background: var(--signal-soft); }
+
+  /* ── 격자 ── */
+  .wrap { position: relative; min-height: 0; display: grid; grid-template-columns: 1fr 0; transition: grid-template-columns .12s; }
+  .wrap.panel-open { grid-template-columns: 1fr 380px; }
+  .grid { overflow: auto; height: 100%; display: grid; grid-auto-rows: max-content; align-content: start;
+    background: var(--paper); touch-action: pan-x pan-y; }
+  .hcorner, .hcol, .hrow, .cell { background: var(--paper); min-width: 0; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .hcorner, .hcol { background: color-mix(in srgb, var(--raise) 70%, var(--paper)); }
+  .hcorner { position: sticky; top: 0; left: 0; z-index: 4; padding: 10px 14px; display: flex; align-items: center; }
+  .hcorner .lab { background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 9px; }
+  .hcol { position: sticky; top: 0; z-index: 3; display: flex; align-items: stretch; }
+  .hcol .hbtn { flex: 1; min-width: 0; padding: 9px 4px 8px 14px; text-align: left; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: transparent; border: 0; color: inherit; }
+  .hcol .fb { flex: none; width: 24px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--faint); opacity: 0; }
+  .hcol:hover .fb, .hcol.fold .fb { opacity: 1; } .hcol .fb:hover { color: var(--signal); }
+  .hcol .fb .ic { width: 14px; height: 14px; opacity: 1; }
+  .hcol.fold { flex-direction: column; align-items: center; }
+  .hcol.fold .fb { width: 100%; height: 26px; }
+  .hcol.fold .hbtn { writing-mode: vertical-rl; padding: 4px 0 12px; justify-content: flex-start; flex-wrap: nowrap; gap: 6px; }
+  .hcol.fold .hbtn .t { font-size: 12px; white-space: nowrap; }
+  .hcol.fold .hbtn .r, .hcol.fold .hbtn .nt { display: none; }
+  .hcol.fold .hbtn .np { writing-mode: horizontal-tb; transform: rotate(90deg); }
+  .cell.fold { padding: 8px 0; text-align: center; }
+  .cell.fold .cnt { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted); background: var(--raise); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 5px; }
+  .cell.fold .cnt.ok { color: var(--good); border-color: var(--good); }
+  .cell.fold .add { display: none; }
+  .hcol .t { font-weight: 700; font-size: 13px; }
+  .hcol .r { font-family: var(--mono); font-size: 10.5px; color: var(--muted); background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+  .hcol .nt { font-family: var(--mono); font-size: 10.5px; color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 1px 8px; }
+  .hcol .np { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--paper); background: var(--signal); border-radius: 999px; padding: 2px 7px; }
+  .hcol.now { background: color-mix(in srgb, var(--signal-soft) 60%, var(--paper)); } .hcol.now .t { color: var(--signal); }
+  .hrow { position: sticky; left: 0; z-index: 2; display: flex; align-items: stretch; background: color-mix(in srgb, var(--raise) 50%, var(--paper)); }
+  .hrow .hbtn { flex: 1; min-width: 0; width: 100%; padding: 12px 14px; text-align: left; display: block; background: transparent; border: 0; color: inherit; }
+  .hrow .fb { position: absolute; right: 4px; top: 6px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--faint); opacity: 0; border-radius: 5px; }
+  .hrow:hover .fb, .hrow.fold .fb { opacity: 1; } .hrow .fb:hover { color: var(--signal); }
+  .hrow .fb .ic { width: 14px; height: 14px; opacity: 1; }
+  .hrow.fold .hbtn { padding: 6px 28px 6px 14px; display: flex; align-items: center; gap: 8px; }
+  .hrow.fold .hbtn .kind { margin-bottom: 0; flex: none; }
+  .hrow.fold .hbtn .t { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .hrow.fold .hbtn .s { display: none; }
+  .hrow.fold .fb { top: 50%; transform: translateY(-50%); }
+  .cell.rfold { min-height: 0; padding: 6px 8px; }
+  .cell.rfold.fold { padding: 6px 2px; text-align: center; }
+  .cell.rfold.fold .cnt { padding: 1px 4px; }
+  .cell.rfold .cnt { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted); background: var(--raise); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 7px; }
+  .cell.rfold .cnt.ok { color: var(--good); border-color: var(--good); }
+  .cell.rfold .add { display: none; }
+  .hrow .t { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 6px; letter-spacing: -.01em; }
+  .hrow .s { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 3px; line-height: 1.35; }
+  /* 행 종류 — 아이콘 없이 글자만, 알약 */
+  .hrow .kind { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700;
+    color: var(--paper); background: var(--c); padding: 2px 9px 1px; margin-bottom: 7px; line-height: 1.3; border-radius: 999px; }
+  .hcol:hover, .hrow:hover { background: var(--raise); }
+  .cell { padding: 8px 8px 6px; min-height: 64px; position: relative; }
+  .cell.now { background: color-mix(in srgb, var(--signal-soft) 40%, var(--paper)); }
+  .cell.over { box-shadow: inset 0 0 0 2px var(--signal); border-radius: 0; }
+  .cell .add { display: block; width: 100%; text-align: center; font-size: 12px; color: transparent; padding: 5px 8px; margin-top: 2px; border-radius: 8px; border: 1px dashed transparent; transition: color .12s, border-color .12s; }
+  .cell:hover .add { color: var(--faint); border-color: var(--rule); } .cell .add:hover { color: var(--signal); border-color: var(--signal); background: var(--signal-soft); }
+  .ro .cell .add { display: none; } .ro .hdr-edit { pointer-events: none; }
+
+  /* ── 카드 ── */
+  /* 카드 — 사용자 요청(2026-09-19)으로 이 페이지만 라운드·그림자를 쓴다. 타입 색 띠는 ::before(라운드 안쪽) */
+  .card { position: relative; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px 9px; margin-bottom: 6px;
+    box-shadow: 0 1px 2px rgba(15, 20, 27, .05); cursor: grab; user-select: none; -webkit-user-select: none; transition: box-shadow .12s, border-color .12s, transform .12s; }
+  .card:last-of-type { margin-bottom: 2px; }
+  .card:hover { border-color: var(--rule-firm); box-shadow: 0 6px 16px rgba(15, 20, 27, .10); transform: translateY(-1px); }
+  .card.sel { border-color: var(--signal); box-shadow: 0 0 0 2px var(--signal-soft), 0 6px 16px rgba(15, 20, 27, .10); }
+  .card.t-pr { --c: var(--c-pr); --cs: var(--cs-pr); } .card.t-doc { --c: var(--c-doc); --cs: var(--cs-doc); } .card.t-qa { --c: var(--c-qa); --cs: var(--cs-qa); }
+  .card.t-ask { --c: var(--c-ask); --cs: var(--cs-ask); } .card.t-infra { --c: var(--c-infra); --cs: var(--cs-infra); } .card.t-decision { --c: var(--c-decision); --cs: var(--cs-decision); }
+  .card.done { opacity: .45; } .card.done:hover { opacity: .8; }
+  .card.delayed { border-color: color-mix(in srgb, var(--bad) 45%, var(--rule)); }
+  .card.flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--bad); } 100% { box-shadow: none; } }
+  .card.ghost { opacity: .35; border-style: dashed; box-shadow: none; transform: none; }
+  .card.pending::after { content: ""; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+  .card.pending { border-style: dotted; }
+  .card .hd { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .card .tt { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--c); background: var(--cs); padding: 1px 6px; border-radius: 4px; flex: 0 0 auto; }
+  .card .hd .act { position: absolute; right: 6px; top: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity .12s; background: var(--paper); padding-left: 6px; border-radius: 6px; }
+  .card.done .hd .act { background: transparent; }
+  .card:hover .act, .card:focus-within .act, .card.sel .act { opacity: 1; }
+  .card .ab { width: 22px; height: 20px; padding: 0; border: 0; background: transparent; color: var(--faint); border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .card .ab .ic { width: 13px; height: 13px; opacity: 1; }
+  .card .ab:hover { color: var(--signal); background: var(--raise); }
+  @media (pointer: coarse) { .card .hd .act { opacity: 1; right: 20px; } }
+  .card .hd .num { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--faint); border: 0; }
+  .card .hd .num:hover { color: var(--signal); }
+  .card .ttl { display: flex; align-items: flex-start; gap: 6px; font-weight: 640; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+  .card .ttl > span { min-width: 0; }
+  .card .env { flex: none; font-family: var(--mono); font-size: 9px; letter-spacing: .1em; font-weight: 700; color: var(--muted); border: 1px solid var(--rule-firm); border-radius: 4px; padding: 1px 5px; line-height: 13px; }
+  .card .env.prod { color: var(--bad); border-color: var(--bad); }
+  .card .hd .st2 { flex: 1 1 auto; min-width: 0; font-family: var(--mono); font-size: 10.5px; letter-spacing: .02em; color: var(--c); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .hd .st2.unk { color: var(--bad); background: var(--bad-soft); padding: 0 5px; border-radius: 4px; }
+  .card .sub { font-size: 11.5px; color: var(--muted); line-height: 1.4; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .note { font-size: 11.5px; color: var(--muted); line-height: 1.4; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .delay { display: flex; align-items: center; gap: 6px; margin: 8px -10px -9px; padding: 6px 10px; background: var(--bad-soft); color: var(--bad); font-size: 11.5px; font-weight: 600; line-height: 1.4; border-top: 1px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius: 0 0 9px 9px; }
+  .card .delay .k { flex: none; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .card .delay span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .blk { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; margin-top: 4px; font-size: 11.5px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .card .blk .to { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .card .blk .ic { width: 12px; height: 12px; opacity: 1; flex: none; color: var(--block); display: block; }
+  .card .blk .k { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--block); flex: none; line-height: 16px; }
+  .card .blk .to { border: 0; background: transparent; color: var(--ink); font: inherit; line-height: 16px; padding: 0; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; text-align: left; }
+  .card .blk .to:hover { color: var(--signal); text-decoration-style: solid; }
+  .card .blk .sep { opacity: .5; }
+  .card .grip { position: absolute; right: 4px; top: 4px; width: 14px; height: 18px; font-family: var(--mono); font-size: 11px; color: var(--rule-firm); text-align: center; line-height: 18px; touch-action: none; cursor: grab; display: none; }
+  @media (pointer: coarse) { .card .grip { display: block; } }
+  .card .steps { display: flex; gap: 3px; margin-top: 7px; align-items: center; }
+  .card .steps .off { flex: none; font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--bad); border: 1px solid var(--bad); border-radius: 4px; padding: 0 4px; line-height: 12px; margin-left: 3px; }
+  .tip { position: fixed; z-index: 70; max-width: 240px; background: var(--ink); color: var(--paper); font-size: 11.5px; line-height: 1.4; padding: 6px 9px; border-radius: 6px; box-shadow: 0 8px 24px rgba(15,20,27,.2); pointer-events: none; opacity: 0; transition: opacity .08s; transform: translate(-50%, calc(-100% - 8px)); }
+  .tip.show { opacity: 1; }
+  .tip .h { display: block; font-weight: 700; font-size: 11px; }
+  .tip .h .mono { font-family: var(--mono); opacity: .7; margin-right: 6px; }
+  .tip .d { display: block; }
+  .tip .k { display: block; opacity: .6; margin-top: 3px; font-size: 10.5px; }
+  .card .steps button { flex: 1; height: 5px; border-radius: 3px; background: var(--rule); padding: 0; min-width: 0; transition: background .12s; }
+  .card .steps button:not(:disabled):hover { background: var(--rule-firm); }
+  .card .steps button.on { background: var(--c); opacity: .45; }
+  .card .steps button.cur { background: var(--c); opacity: 1; }
+  .card .steps button:disabled { cursor: default; }
+  .card .stg { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--c); font-weight: 700; margin-top: 5px; display: flex; gap: 8px; align-items: baseline; }
+  .card .stg .unk { color: var(--faint); background: var(--raise); padding: 0 4px; }
+  .card .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .chip { font-family: var(--mono); font-size: 10px; border: 1px solid var(--rule); border-radius: 5px; background: var(--raise); padding: 0 6px; white-space: nowrap; color: var(--muted); line-height: 17px; }
+  .chip.me { color: var(--signal); border-color: var(--signal); }
+  .chip.over { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+  .chip.blk { color: var(--bad); border-color: var(--bad); }
+  .chip.tk { color: var(--ink); } .chip.tk.fail { color: var(--warn); border-color: var(--warn); }
+  .chip a { border: 0; color: inherit; }
+  .card .lnks { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--rule); font-size: 11.5px; }
+  .card .lnks a, .card .lnks span { color: var(--signal); border: 0; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; line-height: 1.5; }
+  .card .lnks span { color: var(--faint); }
+  .ic { width: 12px; height: 12px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+  .card .lnks a:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .chip.warnc { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .drag-clone { position: fixed; z-index: 50; pointer-events: none; opacity: .95; box-shadow: 0 14px 32px rgba(15, 20, 27, .22); margin: 0; transform: rotate(-1deg) scale(1.02); }
+
+  /* ── 패널 ── */
+  .panel { border-left: 1px solid var(--rule-firm); background: var(--paper); overflow: auto; display: none; min-width: 0; box-shadow: -8px 0 24px rgba(15, 20, 27, .06); }
+  .wrap.panel-open .panel { display: block; }
+  .panel .ph { position: sticky; top: 0; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); padding: 12px 16px; display: flex; align-items: center; gap: 10px; z-index: 1; }
+  .panel .ph .lab { flex: 1; font-size: 11px; color: var(--ink); }
+  .panel .ph .x { font-family: var(--mono); font-size: 13px; color: var(--muted); width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+  .panel .ph .x:hover { color: var(--ink); background: var(--raise); }
+  .panel .body { padding: 12px 14px 40px; }
+  .f { margin-top: 12px; }
+  .f label { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+  .f input, .f select, .f textarea { width: 100%; font: inherit; font-size: 13px; color: var(--ink); background: var(--raise); border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; transition: background .12s, border-color .12s; }
+  .f input:hover, .f select:hover, .f textarea:hover { border-color: var(--rule-firm); }
+  .f input:focus, .f select:focus, .f textarea:focus { background: var(--paper); border-color: var(--signal); outline: none; box-shadow: 0 0 0 3px var(--signal-soft); }
+  .f input[type=date] { font-family: var(--mono); }
+  .f textarea { min-height: 64px; resize: vertical; font-family: inherit; }
+  .f .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .f .help { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .f .ro { font-family: var(--mono); font-size: 11.5px; color: var(--muted); background: var(--raise); border-radius: 7px; padding: 6px 9px; line-height: 1.5; }
+  .f .ro b { color: var(--ink); }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  .btn { font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 6px 13px; border: 1px solid transparent; border-radius: 999px; background: var(--raise); color: var(--ink); }
+  .btn:hover { background: var(--signal-soft); color: var(--signal); }
+  .btn.bad { color: var(--bad); } .btn.bad:hover { border-color: var(--bad); }
+  .btn.pri { background: var(--signal); color: var(--paper); border-color: var(--signal); }
+  .blist { border: 1px solid var(--rule); border-radius: 8px; margin-top: 6px; max-height: 180px; overflow: auto; padding: 0 8px; }
+  .blist label { display: flex; gap: 8px; align-items: center; padding: 5px 2px; border-bottom: 1px solid var(--rule); font-family: inherit; font-size: 12.5px; text-transform: none; letter-spacing: 0; color: var(--ink); font-weight: 500; margin: 0; }
+  .blist input { width: auto; }
+  .blist .k { font-family: var(--mono); font-size: 10px; color: var(--c, var(--faint)); font-weight: 700; }
+  .alist { border-top: 1px solid var(--rule-firm); margin-top: 8px; }
+  .alist > div { display: flex; gap: 8px; align-items: center; padding: 8px 2px; border-bottom: 1px solid var(--rule); }
+  .alist .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alist .w { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+
+  /* ── 배너·토스트 ── */
+  .banner { position: absolute; left: 16px; right: 16px; top: 10px; z-index: 6; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; font-weight: 600; padding: 8px 14px; border-radius: 10px; box-shadow: 0 6px 16px rgba(15,20,27,.08); }
+  .banner.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .banner.info { background: var(--signal-soft); color: var(--signal); border-color: var(--signal); }
+  .empty { padding: 48px 24px; color: var(--muted); font-size: 14px; }
+  .empty code { font-family: var(--mono); background: var(--raise); border: 1px solid var(--rule); padding: 0 4px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--paper); font-size: 12.5px; font-weight: 600; padding: 9px 16px; border-radius: 999px; box-shadow: 0 8px 24px rgba(15,20,27,.2); opacity: 0; pointer-events: none; transition: opacity .15s; }
+  .toast.show { opacity: 1; }
+  .toast.bad { background: var(--bad); }
+  @media (max-width: 720px) { .wrap.panel-open { grid-template-columns: 0 1fr; } .wrap.panel-open .grid { display: none; } .bar { gap: 8px; padding: 0 10px; } .bar .sync { display: none; } :root { --rowhead: 120px; --colmin: 220px; } }
+  @media (prefers-reduced-motion: reduce) { .wrap { transition: none; } }
+</style>
+</head>
+<body>
+<!-- 아이콘 스프라이트: Lucide (ISC) 원본 path 그대로 · 외부 요청 없음 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-ask" viewBox="0 0 24 24"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-chl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M4.929 4.929 19.07 19.071"/></symbol>
+  <symbol id="i-chu" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-chd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></symbol>
+  <symbol id="i-fold-vertical" viewBox="0 0 24 24"><path d="M12 22v-6"/><path d="M12 8V2"/><path d="M4 12H2"/><path d="M10 12H8"/><path d="M16 12h-2"/><path d="M22 12h-2"/><path d="m15 19-3-3-3 3"/><path d="m15 5-3 3-3-3"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+</svg>
+<header class="bar">
+  <h1 id="ttl">보드</h1>
+  <span id="status" class="badge dim">연결 중</span>
+  <span class="sp"></span>
+  <span class="sync" id="syncinfo"></span>
+  <div class="grp" aria-label="카드 필터"><span class="gl"><svg class="ic"><use href="#i-filter"/></svg>필터</span>
+    <button class="tog" id="f-mine" title="담당이 나이고 아직 안 끝난 카드만 보인다">내 몫<span class="n"></span></button>
+    <button class="tog" id="f-done" title="완료된 카드를 감춘다 (카드 단위)">완료 카드 숨김</button>
+  </div>
+  <div class="grp" aria-label="격자 배치"><span class="gl"><svg class="ic"><use href="#i-fold-vertical"/></svg>접기</span>
+    <button class="tog" id="f-fold" title="카드가 전부 완료된 열·행을 한 줄로 접는다 (열·행 단위). 「미정」 열은 비어 있으면 접힌다. 열·행 머리의 화살표로 낱개로도 접힌다">완료된 행·열</button>
+  </div>
+  <div class="grp" aria-label="패널">
+    <button class="tog ib" id="f-arch" title="보관함 — 보관한 카드 목록"><svg class="ic"><use href="#i-archive"/></svg>보관<span class="n"></span></button>
+    <button class="tog ib icon-only" id="theme" title="테마: 시스템 / 라이트 / 다크"><svg class="ic"><use href="#i-sun"/></svg></button>
+  </div>
+  <div class="seg" id="mode" title="조회: 보기·묻기·복사만 · 편집: 드래그·단계·패널 편집">
+    <button data-mode="view"><svg class="ic"><use href="#i-eye"/></svg>조회</button><button data-mode="edit"><svg class="ic"><use href="#i-pencil"/></svg>편집</button>
+  </div>
+</header>
+<div class="wrap" id="wrap">
+  <div class="grid" id="grid" aria-label="진행판"></div>
+  <aside class="panel" id="panel" aria-label="편집"></aside>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+(() => {
+"use strict";
+/*ORDER-BEGIN*/
+const ORD_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const ORD_BASE = ORD_DIGITS.length;
+function ordVal(ch) { const v = ORD_DIGITS.indexOf(ch); if (v < 0) throw new Error("order: bad digit " + ch); return v; }
+// a < b 인 두 키 사이의 키. a=null 은 -∞, b=null 은 +∞. 결과는 '0'으로 끝나지 않는다(그래야 그 앞에 또 넣을 수 있다).
+function between(a, b) {
+  a = a || "";
+  if (b != null && a !== "" && !(a < b)) throw new Error("order: a must be < b (" + a + " >= " + b + ")");
+  if (b === "") throw new Error("order: b must not be empty");
+  let out = "", i = 0, hi = b;
+  for (;;) {
+    const da = i < a.length ? ordVal(a[i]) : 0;
+    const db = hi == null ? ORD_BASE : (i < hi.length ? ordVal(hi[i]) : ORD_BASE);
+    if (hi != null && i >= hi.length) throw new Error("order: b is a prefix of a");
+    if (db - da > 1) return out + ORD_DIGITS[Math.floor((da + db) / 2)];
+    out += ORD_DIGITS[da];
+    if (db - da === 1) hi = null;
+    i++;
+  }
+}
+function ordFirst() { return between(null, null); }
+function ordCompare(x, y) { return x < y ? -1 : x > y ? 1 : 0; }
+/*ORDER-END*/
+/*STAGES-BEGIN*/
+const STAGES = {
+  pr:       ["todo", "wip", "draft", "review", "approved", "merged", "closed"],
+  doc:      ["todo", "draft", "review", "published"],
+  qa:       ["todo", "in_progress", "pass", "fail", "blocked"],
+  ask:      ["todo", "requested", "waiting", "done"],
+  infra:    ["planned", "requested", "in_progress", "done"],
+  decision: ["pending", "decided"],
+};
+const DONE = { pr: ["merged", "closed"], doc: ["published"], qa: ["pass"], ask: ["done"], infra: ["done"], decision: ["decided"] };
+const STAGE_LABEL = {
+  todo: "착수 전", wip: "작업 중", draft: "draft", approved: "승인", merged: "머지", closed: "닫힘",
+  review: "리뷰", published: "게시", in_progress: "진행", pass: "pass", fail: "fail", blocked: "blocked",
+  requested: "요청함", waiting: "회신 대기", done: "완료", planned: "예정", pending: "대기", decided: "결정됨",
+};
+const TYPE_LABEL = { pr: "PR", doc: "문서", qa: "QA", ask: "요청", infra: "인프라", decision: "결정" };
+const TYPE_ICON = { pr: "⟨/⟩", doc: "¶", qa: "✓", ask: "✉", infra: "⇪", decision: "◆" };
+function isDone(type, stage) { return (DONE[type] || []).includes(stage); }
+// 라벨은 타입의 어휘 안에서만 찾는다(복사 텍스트용 — 카드 첫 줄은 cardHTML의 unk 분기가 같은 일을 한다). qa 카드의 "done"을 ask의 "완료"로 읽어 주면 흐림 없이 글자만 "완료"인 모호한 카드가 된다.
+function stageLabel(type, stage) { if (!stage) return "—"; return (STAGES[type] || []).includes(stage) ? (STAGE_LABEL[stage] || stage) : `단계 오류 · ${stage}`; }
+function stageIndex(type, stage) { return (STAGES[type] || []).indexOf(stage); }
+/*STAGES-END*/
+// 스텝 바는 "순서대로 지나가는 경로"만 그린다. 닫힘·fail·blocked는 경로의 다음 칸이 아니라 갈림길이라 바 옆 태그로 뺀다(패널에서는 선택 가능).
+const OFFPATH = { pr: ["closed"], qa: ["fail", "blocked"] };
+const pathOf = (t) => (STAGES[t] || []).filter((s) => !(OFFPATH[t] || []).includes(s));
+// 호버 툴팁 — "이 칸이 무슨 뜻인가". PR은 실측 판정 기준을 그대로 적는다(references/pr-stages.md와 같은 문장).
+const STAGE_DESC = {
+  pr: { todo: "원격 브랜치도 PR도 없음", wip: "원격 브랜치는 있고 PR은 아직 없음", draft: "PR이 draft", review: "PR ready · 리뷰 진행 (타인 리뷰·코멘트 수는 첫 줄에)", approved: "리뷰 승인(APPROVED)", merged: "머지됨", closed: "머지 없이 닫힘" },
+  doc: { todo: "작성 전", draft: "초안 있음 — 링크를 붙인다", review: "리뷰 요청함", published: "게시·공유됨" },
+  qa: { todo: "수행 전", in_progress: "수행 중", pass: "통과", fail: "실패 — 재수행 필요", blocked: "선행 조건에 막힘" },
+  ask: { todo: "요청 전", requested: "요청 보냄", waiting: "회신 기다리는 중", done: "회신 받고 처리 끝" },
+  infra: { planned: "예정", requested: "인프라 티켓 냈음 — 생성은 배포 직전에", in_progress: "만드는 중", done: "완료" },
+  decision: { pending: "결정 대기", decided: "결정됨" },
+};
+
+const OWNER_LABEL = { me: "나", agent: "에이전트", person: "사람", external: "외부" };
+// 인프라 카드의 환경. dev는 개발과 함께, prod는 티켓을 미리 내고(requested) 생성은 배포 직전에(in_progress).
+const ENV_LABEL = { dev: "DEV", test: "TEST", prod: "PROD" };
+// 행의 작업 종류 — 사람이 읽는 분류. 카드 기본 타입(KIND_TYPE)을 정하지만 카드 타입과 1:1은 아니다(사전 준비는 타입이 없다).
+const ROW_KIND = { code: "코드", infra: "인프라", qa: "QA", doc: "문서", prep: "사전 준비", ask: "외부 요청" };
+const KIND_TYPE = { code: "pr", infra: "infra", qa: "qa", doc: "doc", prep: "infra", ask: "ask" };
+const TYPE_KIND = { pr: "code", infra: "infra", qa: "qa", doc: "doc", ask: "ask", decision: "prep" };
+const rowKind = (r) => r.kind || (r.type ? TYPE_KIND[r.type] : null) || null;
+const TYPES = Object.keys(STAGES);
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad = (n) => String(n).padStart(2, "0");
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const md = (iso) => iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : "";
+const nowISO = () => new Date().toISOString();
+const fmtAt = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const newId = () => "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const ic = (n) => `<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+// 링크 칩 라벨 — 어디로 가는 링크인지 한 단어로
+function linkLabel(u) {
+  try {
+    const url = new URL(u), h = url.hostname, p = url.pathname;
+    if (/claude\.ai$/.test(h)) return "아티팩트";
+    if (/atlassian\.net$/.test(h)) return /\/wiki\//.test(p) ? "Confluence" : (p.match(/\/browse\/([A-Z0-9-]+)/)?.[1] || "Jira");
+    if (/github\.com$/.test(h)) { const m = p.match(/\/(pull|issues)\/(\d+)/); return m ? `#${m[2]}` : (p.split("/").filter(Boolean).slice(-1)[0] || "GitHub"); }
+    if (/notion\.(so|site)$/.test(h)) return "Notion";
+    if (/docs\.google\.com$/.test(h)) return "Google Docs";
+    if (/figma\.com$/.test(h)) return "Figma";
+    if (/slack\.com$/.test(h)) return "Slack";
+    const seg = p.split("/").filter(Boolean).slice(-1)[0] || "";
+    return (seg && seg.length <= 22 ? seg : h.replace(/^www\./, "")).slice(0, 22);
+  } catch { return u.slice(0, 22); }
+}
+
+// ───────────────────────── State ─────────────────────────
+const S = {
+  meta: null, sync: null, cards: new Map(), db: null, user: null, demo: false, ready: false,
+  ui: { panel: null, mine: false, hideDone: false, readOnly: false, pending: new Set(), drag: null, deferred: null, fold: new Set(), foldRows: new Set(), unfold: new Set(), unfoldRows: new Set(), autoFold: false, foldLoaded: false, viewMode: true },
+};
+const displayStage = (c) => c.type === "pr" ? (c.probe?.stage || c.stage || "todo") : (c.stage || STAGES[c.type]?.[0] || "");
+const cardDone = (c) => isDone(c.type, displayStage(c));
+const isBlocked = (c) => (c.blockedBy || []).some((id) => { const b = S.cards.get(id); return b && !b.archived && !cardDone(b); });
+// 지연 = 미완료인데 (기한이 지났거나 · 놓인 열의 기간이 끝났거나 · 막혀 있거나). 사유는 delayNote가 앞에, 자동 판정이 뒤에 붙는다.
+// 편집/조회 모드 — 권한(readOnly)과 별개로 보는 사람이 고르는 잠금. 조회 모드에서는 드래그·단계·패널 편집이 막히고 묻기·복사·접기만 된다.
+const locked = () => S.ui.readOnly || S.ui.viewMode;
+function loadMode() { try { const v = localStorage.getItem("board-mode"); if (v === "edit") S.ui.viewMode = false; } catch (_) {} }
+function setMode(edit) { S.ui.viewMode = !edit; try { localStorage.setItem("board-mode", edit ? "edit" : "view"); } catch (_) {} if (S.ui.panel) $("#panel").dataset.id = ""; Render.all(); toast(edit ? "편집 모드 — 드래그·단계·패널 편집이 됩니다" : "조회 모드 — 보기·묻기·복사만 됩니다"); }
+// 열 접기 — 뷰어별 편의라 localStorage. 자동 접기는 "카드가 있고 전부 완료"인 열.
+const foldKey = () => "board-fold:" + (S.meta?.ticket || S.meta?.title || "board");
+function loadFold() { if (S.ui.foldLoaded || !S.meta) return; S.ui.foldLoaded = true; try { const v = JSON.parse(localStorage.getItem(foldKey()) || "null"); if (v) { S.ui.fold = new Set(v.fold || []); S.ui.foldRows = new Set(v.rows || []); S.ui.unfold = new Set(v.unfold || []); S.ui.unfoldRows = new Set(v.unfoldRows || []); S.ui.autoFold = !!v.auto; } } catch (_) {} }
+function saveFold() { try { localStorage.setItem(foldKey(), JSON.stringify({ fold: [...S.ui.fold], rows: [...S.ui.foldRows], unfold: [...S.ui.unfold], unfoldRows: [...S.ui.unfoldRows], auto: S.ui.autoFold })); } catch (_) {} }
+// 완료 접기 토글 — 켜면 "손으로 펼쳐 둔 예외"를 지우고 전부 자동 판정으로, 끄면 자동만 풀고 손으로 접은 것은 남긴다
+function setAutoFold(on) { S.ui.autoFold = on; if (on) { S.ui.unfold.clear(); S.ui.unfoldRows.clear(); } saveFold(); Render.all(); const n = on ? (S.meta?.cols || []).filter(isFolded).length + (S.meta?.rows || []).filter(isRowFolded).length : 0; if (on) toast(n ? `완료된 열·행 ${n}개를 접었습니다` : "전부 완료된 열·행이 아직 없습니다"); }
+function colCards(colId) { return [...S.cards.values()].filter((c) => !c.archived && c.pos?.col === colId); }
+function colAllDone(colId) { const l = colCards(colId); return l.length > 0 && l.every(cardDone); }
+// 자동 접기 대상: 카드가 전부 완료된 열. 고정 「미정」 열은 비어 있을 때 접힌다(완료가 없어도 볼 게 없다).
+function colAutoFold(col) { return col.fixed ? colCards(col.id).length === 0 : colAllDone(col.id); }
+function isFolded(col) { return S.ui.fold.has(col.id) || (S.ui.autoFold && !S.ui.unfold.has(col.id) && colAutoFold(col)); }
+function rowCards(rowId) { return [...S.cards.values()].filter((c) => !c.archived && c.pos?.row === rowId); }
+function rowAllDone(rowId) { const l = rowCards(rowId); return l.length > 0 && l.every(cardDone); }
+function isRowFolded(row) { return S.ui.foldRows.has(row.id) || (S.ui.autoFold && !S.ui.unfoldRows.has(row.id) && rowAllDone(row.id)); }
+function toggleRowFold(rowId) { const row = (S.meta?.rows || []).find((r) => r.id === rowId); if (!row) return; if (isRowFolded(row)) { if (S.ui.foldRows.has(rowId)) S.ui.foldRows.delete(rowId); else S.ui.unfoldRows.add(rowId); } else { if (S.ui.unfoldRows.has(rowId)) S.ui.unfoldRows.delete(rowId); else S.ui.foldRows.add(rowId); } saveFold(); Render.all(); }
+// 낱개 토글 — 자동으로 접힌 것을 펼치면 그 열만 예외로 남기고(토글은 유지), 예외였던 것을 다시 접으면 예외를 지운다
+function toggleFold(colId) { const col = (S.meta?.cols || []).find((c) => c.id === colId); if (!col) return; if (isFolded(col)) { if (S.ui.fold.has(colId)) S.ui.fold.delete(colId); else S.ui.unfold.add(colId); } else { if (S.ui.unfold.has(colId)) S.ui.unfold.delete(colId); else S.ui.fold.add(colId); } saveFold(); Render.all(); }
+function delayOf(c) {
+  if (!c || c.archived || cardDone(c)) return null;
+  const t = todayISO(), r = [];
+  if (c.delayNote) r.push(c.delayNote);
+  if (c.due && c.due < t) r.push(`기한 ${md(c.due)} 지남`);
+  const col = (S.meta?.cols || []).find((x) => x.id === c.pos?.col);
+  if (col && !col.fixed && col.end && col.end < t) r.push(`${col.label} 기간 지남 (${md(col.end)})`);
+  return r.length ? r : null;
+}
+const rowOf = (id) => (S.meta?.rows || []).find((r) => r.id === id);
+const colOf = (id) => (S.meta?.cols || []).find((c) => c.id === id);
+function cellCards(row, col) {
+  const list = [];
+  for (const c of S.cards.values()) if (!c.archived && c.pos?.row === row && c.pos?.col === col) list.push(c);
+  return list.sort((a, b) => ordCompare(a.pos.ord || "", b.pos.ord || "") || ordCompare(a.id, b.id));
+}
+function visible(c) {
+  if (S.ui.hideDone && cardDone(c)) return false;
+  if (S.ui.mine && !(c.owner?.kind === "me" && !cardDone(c))) return false;
+  return true;
+}
+
+// ───────────────────────── Toast ─────────────────────────
+let toastT = 0;
+// 카드 → Claude. 셸의 코멘트 창을 카드에 앵커해 연다(페이지는 아무것도 게시하지 않는다). 사용자가 거기서 "Claude에게 보내기"를 누르면 세션에 도착한다.
+async function askClaude(el) {
+  if (!S.cm) { toast("claude.ai 뷰어 안에서만 동작합니다", true); return; }
+  try {
+    const r = await S.cm.openComposer({ element: el });
+    if (!r?.opened) toast("코멘트 창을 열지 못했습니다 — 작성 중인 코멘트가 있으면 먼저 닫아 주세요", true);
+  } catch (e) {
+    if (e?.code === "unavailable") { S.cm = null; Render.all(); toast("이 뷰에서는 코멘트를 쓸 수 없습니다", true); }
+    else toast("코멘트 창 열기 실패: " + (e?.code || e?.message || e), true);
+  }
+}
+// 카드 한 장을 채팅에 붙여 넣을 텍스트로. 에이전트가 ArtifactData로 바로 찾을 수 있게 id를 앞세운다.
+function cardContext(c) {
+  const row = (S.meta?.rows || []).find((r) => r.id === c.pos?.row), col = (S.meta?.cols || []).find((x) => x.id === c.pos?.col);
+  const stage = displayStage(c), L = [];
+  L.push(`[보드 카드] ${c.title || "(제목 없음)"}`);
+  L.push(`보드: ${document.title} · 카드 id: ${c.id}`);
+  L.push(`타입: ${TYPE_LABEL[c.type] || c.type} · 행: ${[row?.label, row?.sub].filter(Boolean).join(" ") || c.pos?.row || "-"} · 열: ${col ? col.label + (col.start ? ` (${md(col.start)}~${md(col.end)})` : "") : c.pos?.col || "-"}`);
+  L.push(`단계: ${stageLabel(c.type, stage)}${c.probe?.at ? ` (실측 ${fmtAt(c.probe.at)})` : ""}${isBlocked(c) ? " · 막힘" : ""}`);
+  const pr = c.probe?.pr; if (c.pr || pr) L.push(`PR: ${pr?.number ? "#" + pr.number + " " : ""}${c.pr || pr?.url || ""}${pr?.title ? " — " + pr.title : ""}${pr?.state ? ` [${pr.state}${pr.isDraft ? " draft" : ""}]` : ""}`);
+  if (c.branch) L.push(`브랜치: ${c.branch}`);
+  if (c.ticket) L.push(`티켓: ${c.ticket.key || c.ticket.url}${S.meta?.jiraBase && c.ticket.key ? " " + S.meta.jiraBase.replace(/\/?$/, "/") + c.ticket.key : ""}${c.probe?.ticket?.status ? " · " + c.probe.ticket.status : ""}`);
+  if (c.type === "ask" && c.target) L.push(`요청 대상: ${c.target}`);
+  if (c.type === "infra" && c.env) L.push(`환경: ${c.env}`);
+  if (c.owner?.kind) L.push(`담당: ${OWNER_LABEL[c.owner.kind] || c.owner.kind}${c.owner.name ? " " + c.owner.name : ""}${c.due ? ` · 기한 ${md(c.due)}` : ""}`);
+  if ((c.links || []).length) L.push(`링크: ${c.links.join(" ")}`);
+  if ((c.blockedBy || []).length) L.push(`막힘 원인: ${c.blockedBy.map((id) => S.cards.get(id)?.title || id).join(", ")}`);
+  if (c.note) L.push(`메모: ${c.note}`);
+  const dl = delayOf(c); if (dl) L.push(`지연: ${dl.join(" · ")}`);
+  return L.join("\n");
+}
+async function copyContext(id) {
+  const c = S.cards.get(id); if (!c) return;
+  const text = cardContext(c);
+  try { await navigator.clipboard.writeText(text); }
+  catch (_) { const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (e2) { document.body.removeChild(ta); toast("복사 실패 — 카드 패널의 내용을 직접 복사해 주세요", true); return; } document.body.removeChild(ta); }
+  toast("카드 컨텍스트를 복사했습니다 — 채팅에 붙여 넣으세요");
+}
+function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : ""); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
+
+// ───────────────────────── Theme ─────────────────────────
+const Theme = (() => {
+  // 라이트/다크 둘뿐. 처음엔 OS 설정을 따르고, 한 번 누르면 그 선택이 이 브라우저에 남는다.
+  const icon = { light: "sun", dark: "moon" }, name = { light: "라이트", dark: "다크" };
+  const os = () => (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  let cur = os();
+  try { const v = localStorage.getItem("board-theme"); if (v === "light" || v === "dark") cur = v; } catch (_) {}
+  const apply = () => { document.documentElement.setAttribute("data-theme", cur); $("#theme").innerHTML = `<svg class="ic"><use href="#i-${icon[cur]}"/></svg>`; $("#theme").title = `테마: ${name[cur]} — 누르면 ${name[cur === "light" ? "dark" : "light"]}`; };
+  $("#theme").addEventListener("click", () => { cur = cur === "light" ? "dark" : "light"; try { localStorage.setItem("board-theme", cur); } catch (_) {} apply(); });
+  apply();
+  return { apply };
+})();
+
+// ───────────────────────── Store ─────────────────────────
+const Store = {
+  async init() {
+    loadMode();
+    const demo = /[?&]demo\b/.test(location.search) || window.__BOARD_DEMO__;
+    if (!window.claude || typeof window.claude.use !== "function") {
+      if (demo) { S.demo = true; Store.loadDemo(); setStatus("demo", "dim"); return; }
+      setStatus("뷰어 밖", "warn"); banner("이 페이지는 claude.ai 아티팩트 뷰어 안에서만 데이터에 연결됩니다. 로컬 검증은 ?demo", "warn"); S.ready = true; Render.all(); return;
+    }
+    setStatus("연결 중", "dim");
+    const [db, user, cm] = await Promise.all([claude.use("db"), claude.use("user"), claude.use("comments")]);
+    S.db = db; S.user = user; S.cm = cm;
+    if (!db) { setStatus("읽기 전용", "warn"); banner("데이터에 연결할 수 없습니다 — 로그인 상태와 접근 권한을 확인하세요.", "bad"); S.ui.readOnly = true; S.ready = true; Render.all(); return; }
+    try { const can = user ? await user.canEdit() : null; if (can === false) { S.ui.readOnly = true; setStatus("읽기 전용", "warn"); } } catch (_) {}
+    db.doc("meta/board").onSnapshot((snap) => { S.meta = snap.exists ? snap.data() : null; S.ready = true; if (!S.ui.readOnly) setStatus("연결됨", "info"); Render.all(); }, (e) => { banner("meta 구독 실패: " + e.code, "bad"); });
+    db.doc("meta/sync").onSnapshot((snap) => { S.sync = snap.exists ? snap.data() : null; Render.bar(); }, () => {});
+    db.collection("cards").onSnapshot((snap) => {
+      if (S.ui.drag) { S.ui.deferred = snap; return; }
+      Store.applyCards(snap);
+    }, (e) => { banner("cards 구독 실패: " + e.code, "bad"); });
+  },
+  applyCards(snap) {
+    const next = new Map();
+    for (const d of snap.docs) { const c = d.data(); if (c) next.set(d.id, { ...c, id: c.id || d.id }); }
+    S.cards = next;
+    for (const id of [...S.ui.pending]) if (!next.has(id)) S.ui.pending.delete(id);
+    Render.all();
+  },
+  loadDemo() {
+    S.meta = clone(DEMO.meta); S.sync = clone(DEMO.sync); S.cards = new Map(DEMO.cards.map((c) => [c.id, clone(c)])); S.ready = true; Render.all();
+  },
+  // 카드 부분 갱신. 낙관 반영은 호출자가 이미 했고, 실패하면 revert()를 부른다.
+  async update(id, patch, revert) {
+    if (locked()) { toast(S.ui.readOnly ? "읽기 전용입니다" : "조회 모드입니다 — 상단 「편집」을 켜세요", true); revert && revert(); return false; }
+    patch = { ...patch, updatedAt: nowISO() };
+    const local = S.cards.get(id); if (local) deepMerge(local, patch);
+    if (S.demo) { Render.all(); return true; }
+    S.ui.pending.add(id); Render.card(id);
+    try { await S.db.doc("cards/" + id).update(patch); S.ui.pending.delete(id); Render.card(id); return true; }
+    catch (e) { S.ui.pending.delete(id); Store.fail(e); revert && revert(); Render.all(); return false; }
+  },
+  async create(card) {
+    if (locked()) { toast(S.ui.readOnly ? "읽기 전용입니다" : "조회 모드입니다 — 상단 「편집」을 켜세요", true); return false; }
+    S.cards.set(card.id, card);
+    if (S.demo) { Render.all(); return true; }
+    S.ui.pending.add(card.id); Render.all();
+    try { await S.db.collection("cards").doc(card.id).set(card); S.ui.pending.delete(card.id); Render.card(card.id); return true; }
+    catch (e) { S.cards.delete(card.id); S.ui.pending.delete(card.id); Store.fail(e); Render.all(); return false; }
+  },
+  async updateMeta(patch) {
+    if (locked()) { toast(S.ui.readOnly ? "읽기 전용입니다" : "조회 모드입니다 — 상단 「편집」을 켜세요", true); return false; }
+    patch = { ...patch, updatedAt: nowISO() };
+    const prev = clone(S.meta); Object.assign(S.meta, patch); Render.all();
+    if (S.demo) return true;
+    try { await S.db.doc("meta/board").update(patch); return true; }
+    catch (e) { S.meta = prev; Store.fail(e); Render.all(); return false; }
+  },
+  fail(e) {
+    const code = e?.code || "error";
+    if (code === "invalid_argument" && !S.ui.readOnly && S.user == null) { S.ui.readOnly = true; setStatus("읽기 전용", "warn"); }
+    toast("저장 실패: " + code + (e?.message ? " — " + e.message : ""), true);
+  },
+};
+function deepMerge(target, patch) { for (const [k, v] of Object.entries(patch)) { if (v && typeof v === "object" && !Array.isArray(v) && target[k] && typeof target[k] === "object" && !Array.isArray(target[k])) deepMerge(target[k], v); else target[k] = v; } }
+// 상태 배지는 정상(연결됨)일 때는 숨긴다 — "무엇이 연결됐나"는 잘 안 될 때만 설명할 가치가 있다
+function setStatus(text, cls) {
+  const el = $("#status"); el.textContent = text; el.className = "badge " + cls; el.hidden = cls === "info";
+  el.title = { info: "", dim: text === "demo" ? "데모 데이터 — 보드 DB에 연결되지 않은 로컬 미리보기" : "보드 데이터(DB)를 불러오는 중", warn: "보드 DB에 쓰기 권한이 없어 보기만 됩니다 — 편집은 소유자·편집자만", bad: "보드 DB에 연결하지 못했습니다" }[cls] || "";
+}
+function banner(text, cls) { let b = $("#banner"); if (!b) { b = document.createElement("div"); b.id = "banner"; $("#wrap").prepend(b); } b.className = "banner " + (cls || ""); b.textContent = text; }
+
+// ───────────────────────── Render ─────────────────────────
+const Render = {
+  all() { Render.bar(); Render.grid(); Render.panel(); },
+  bar() {
+    $("#ttl").textContent = S.meta?.title || document.title.replace(/^📋 보드 \| /, "");
+    const mine = [...S.cards.values()].filter((c) => !c.archived && c.owner?.kind === "me" && !cardDone(c)).length;
+    const arch = [...S.cards.values()].filter((c) => c.archived).length;
+    $("#f-mine").classList.toggle("on", S.ui.mine); $("#f-mine .n").textContent = mine || "";
+    $("#f-done").classList.toggle("on", S.ui.hideDone);
+    $("#f-fold").classList.toggle("on", S.ui.autoFold);
+    $("#f-arch").classList.toggle("on", S.ui.panel?.kind === "archive"); $("#f-arch .n").textContent = arch || "";
+    const si = $("#syncinfo");
+    if (S.sync?.at) {
+      const fl = S.sync.failures || [];
+      const tip = fl.length ? fl.map((f) => `${f.what}${f.id && S.cards.get(f.id) ? " (" + S.cards.get(f.id).title + ")" : ""} — ${f.err}`).join("\n") : "에이전트가 GitHub·Jira에서 상태를 읽지 못한 항목 수";
+      si.innerHTML = `실측 <b>${esc(fmtAt(S.sync.at))}</b>${S.sync.failed ? ` · <span style="color:var(--warn);cursor:help;text-decoration:underline dotted;text-underline-offset:3px" title="${esc(tip)}">미실측 ${S.sync.failed}</span>` : ""}`;
+    } else si.textContent = "";
+    document.body.classList.toggle("ro", locked());
+    const mb = $("#mode"); mb.hidden = S.ui.readOnly; mb.querySelector("[data-mode=view]").classList.toggle("on", S.ui.viewMode); mb.querySelector("[data-mode=edit]").classList.toggle("on", !S.ui.viewMode);
+  },
+  grid() {
+    const g = $("#grid");
+    const sl = g.scrollLeft, st = g.scrollTop;
+    if (!S.ready) { g.innerHTML = ""; return; }
+    if (!S.meta) { g.style.gridTemplateColumns = "1fr"; g.innerHTML = `<div class="empty">보드 데이터가 없습니다. 에이전트에게 <code>/board new</code>로 행·열을 만들어 달라고 하세요.</div>`; return; }
+    const rows = S.meta.rows || [], cols = S.meta.cols || [], today = todayISO();
+    loadFold();
+    const folded = Object.fromEntries(cols.map((c) => [c.id, isFolded(c)]));
+    g.style.gridTemplateColumns = `var(--rowhead) ${cols.map((c) => folded[c.id] ? "var(--colfold)" : "minmax(var(--colmin), 1fr)").join(" ")}`;
+    let h = `<div class="hcorner"><span class="lab">${esc(S.meta.ticket || "")}</span></div>`;
+    for (const c of cols) {
+      const now = c.start && c.end && c.start <= today && today <= c.end, f = folded[c.id];
+      h += `<div class="hcol${now ? " now" : ""}${f ? " fold" : ""}" data-col="${esc(c.id)}">`;
+      if (f) h += `<button class="fb" data-fold="${esc(c.id)}" title="열 펼치기">${ic("chr")}</button>`;
+      h += `<button class="hbtn hdr-edit" data-col="${esc(c.id)}" title="${f ? "열 펼치기" : "열 편집"}"><span class="t">${esc(c.label)}</span>${c.start ? `<span class="r">${md(c.start)}~${md(c.end)}</span>` : ""}${c.note ? `<span class="nt">${esc(c.note)}</span>` : ""}${now ? `<span class="np">지금</span>` : ""}</button>`;
+      if (!f) h += `<button class="fb" data-fold="${esc(c.id)}" title="열 접기">${ic("chl")}</button>`;
+      h += `</div>`;
+    }
+    for (const r of rows) {
+      const k = rowKind(r), kt = k ? KIND_TYPE[k] : null;
+      const rf = isRowFolded(r);
+      h += `<div class="hrow${rf ? " fold" : ""}" data-row="${esc(r.id)}"${k ? ` style="--c:var(--c-${esc(kt)})"` : ""}><button class="hbtn hdr-edit" data-row="${esc(r.id)}" title="${rf ? "행 펼치기" : "행 편집"}">${k ? `<span class="kind">${esc(ROW_KIND[k])}</span>` : ""}<span class="t">${esc(r.sub || r.label)}</span>${r.sub ? `<span class="s">${esc(r.label)}</span>` : ""}</button><button class="fb" data-rfold="${esc(r.id)}" title="${rf ? "행 펼치기" : "행 접기"}">${ic(rf ? "chd" : "chu")}</button></div>`;
+      for (const c of cols) {
+        const now = c.start && c.end && c.start <= today && today <= c.end;
+        if (rf) {
+          const l = cellCards(r.id, c.id), dn = l.filter(cardDone).length;
+          h += `<div class="cell rfold${folded[c.id] ? " fold" : ""}${now ? " now" : ""}" data-row="${esc(r.id)}" data-col="${esc(c.id)}">${l.length ? `<span class="cnt${dn === l.length ? " ok" : ""}" title="${esc(l.map((x) => (cardDone(x) ? "✓ " : "· ") + x.title).join("\n"))}">${dn}/${l.length}</span>` : ""}</div>`;
+          continue;
+        }
+        if (folded[c.id]) {
+          const l = cellCards(r.id, c.id), dn = l.filter(cardDone).length;
+          h += `<div class="cell fold${now ? " now" : ""}" data-row="${esc(r.id)}" data-col="${esc(c.id)}">${l.length ? `<span class="cnt${dn === l.length ? " ok" : ""}" title="${esc(l.map((x) => (cardDone(x) ? "✓ " : "· ") + x.title).join("\n"))}">${dn}/${l.length}</span>` : ""}</div>`;
+          continue;
+        }
+        h += `<div class="cell${now ? " now" : ""}" data-row="${esc(r.id)}" data-col="${esc(c.id)}">`;
+        for (const card of cellCards(r.id, c.id)) if (visible(card)) h += Render.cardHTML(card);
+        h += `<button class="add" data-add="1" title="카드 추가">+ 추가</button></div>`;
+      }
+    }
+    if (!rows.length) h += `<div class="empty" style="grid-column:1/-1">행이 없습니다. 좌상단 모서리를 눌러 행을 추가하세요.</div>`;
+    g.innerHTML = h;
+    g.scrollLeft = sl; g.scrollTop = st;
+  },
+  cardHTML(c) {
+    const stage = displayStage(c), list = pathOf(c.type), idx = list.indexOf(stage), done = cardDone(c), blocked = isBlocked(c);
+    const off = (OFFPATH[c.type] || []).includes(stage), unk = !off && idx < 0 && (STAGES[c.type] || []).length > 0, delay = delayOf(c);
+    const cls = ["card", "t-" + c.type, done ? "done" : "", blocked ? "blocked" : "", delay ? "delayed" : "", S.ui.pending.has(c.id) ? "pending" : "", S.ui.panel?.kind === "card" && S.ui.panel.id === c.id ? "sel" : ""].filter(Boolean).join(" ");
+    const prNum = c.probe?.pr?.number || (String(c.pr || "").match(/\/pull\/(\d+)/) || [])[1] || null, prHref = c.pr || c.probe?.pr?.url || null;
+    const rawTitle = c.title || "(제목 없음)";
+    let titleText = rawTitle.replace(/[✅☐]/g, "").replace(/\s{2,}/g, " ").replace(/^\s*[·,]\s*|\s*[·,]\s*$/g, "").trim() || rawTitle;
+    // PR 제목 보강 — 카드 제목이 번호·순번·날짜·상태어뿐이면 GitHub PR 제목을 본문으로, 아니면 부제로
+    const prTitle = c.type === "pr" ? (c.probe?.pr?.title || null) : null;
+    const bare = /^[\s#\d①②③④⑤⑥⑦⑧⑨⑩·.\/~\-]*(머지|draft|ready|리뷰 대기|리뷰 중|승인|닫힘|merged|closed)?[\s#\d①②③④⑤⑥⑦⑧⑨⑩·.\/~\-()]*$/i.test(titleText.replace(/\d{1,2}\/\d{1,2}/g, ""));
+    // PR 제목 정제 — "feat(scope): " 접두와 "(TICKET-123)" 접미는 보드에서 소음이다
+    const cleanPr = (t) => t.replace(/^(feat|fix|refactor|chore|docs|test|build|ci|perf|style|revert)(\([^)]*\))?!?:\s*/i, "").replace(/\s*\((?:[A-Z][A-Z0-9]+-\d+)\)\s*$/, "").trim();
+    let subTitle = null;
+    if (prTitle) { if (bare) titleText = `${titleText.match(/[①②③④⑤⑥⑦⑧⑨⑩]/)?.[0] || ""} ${cleanPr(prTitle)}`.trim(); else if (!titleText.includes(cleanPr(prTitle)) && !titleText.includes(prTitle)) subTitle = cleanPr(prTitle); }
+    // 셋째 줄은 하나뿐 — 메모가 있으면 메모, 없으면 PR 제목(부제). 둘 다 보이면 카드가 다섯 줄이 된다.
+    // 둘째 줄 — 현재 상황 한 줄(실측 기반) + 메모
+    const st = [];
+    if (unk) st.push(`단계 값 오류 "${stage}" — 패널에서 다시 고르세요`);
+    else if (c.type === "pr") {
+      const pr = c.probe?.pr;
+      st.push(STAGE_LABEL[stage] || stage);
+      if (pr) { if (pr.state === "MERGED" && pr.mergedAt) st[0] = `머지 ${md(pr.mergedAt.slice(0, 10))}`; if (pr.state === "OPEN" && (pr.otherReviews || pr.otherComments)) st.push(`리뷰 ${pr.otherReviews || 0} · 코멘트 ${pr.otherComments || 0}`); if (pr.state === "OPEN" && pr.reviewRequests) st.push(`리뷰어 ${pr.reviewRequests}`); }
+      else if (c.probe?.branch?.exists) st.push("브랜치 있음 · PR 전"); else if (c.branch) st.push("브랜치 미확인");
+    } else {
+      st.push(STAGE_LABEL[stage] || stage || "—");
+      if (c.probe?.ticket?.status) st.push(`티켓 ${c.probe.ticket.status}`);   // 실측 실패는 링크 행의 ⚠로만 — 상황 줄은 사람이 읽는 상태만
+    }
+    const statusLine = st.filter(Boolean).join(" · ");
+    let noteText = c.note || "";
+    if (c.type === "pr" && prNum) noteText = noteText.replace(new RegExp(`#${prNum}\\b`, "g"), "").replace(/(^|\s·\s)(\d{1,2}\/\d{1,2}\s)?(머지|draft|ready)(?=\s·\s|$)/g, "$1").replace(/^(\s*·\s*)+|(\s*·\s*)+$/g, "").replace(/(\s·\s){2,}/g, " · ").trim();
+    let h = `<div class="${cls}" data-id="${esc(c.id)}" tabindex="0"><div class="hd"><span class="tt">${esc(TYPE_LABEL[c.type] || c.type)}</span>${c.type === "infra" && ENV_LABEL[c.env] ? `<span class="env ${esc(c.env)}" title="${c.env === "prod" ? "운영 환경 — 티켓은 미리, 생성은 배포 직전" : c.env + " 환경"}">${ENV_LABEL[c.env]}</span>` : ""}<span class="st2 ${unk ? "unk" : ""}" title="${esc(statusLine)}">${esc(statusLine)}</span><span class="act">${S.cm || S.demo ? `<button class="ab" data-ask title="Claude에게 묻기 — 이 카드에 코멘트 창을 엽니다">${ic("ask")}</button>` : ""}<button class="ab" data-ctx title="카드 컨텍스트 복사 — 채팅에 붙여 넣을 텍스트">${ic("copy")}</button></span></div><div class="ttl"><span>${esc(titleText)}</span></div>${noteText ? `<div class="note" title="${esc(noteText)}">${esc(noteText)}</div>` : subTitle ? `<div class="sub" title="${esc(subTitle)}">${esc(subTitle)}</div>` : ""}${blocked ? `<div class="blk">${ic("ban")}<span class="k">Blocked</span>${(c.blockedBy || []).map((id) => S.cards.get(id)).filter((b) => b && !b.archived && !cardDone(b)).map((b) => `<button class="to" data-to="${esc(b.id)}" title="막는 카드로 이동">${esc(b.title)}</button>`).join(`<span class="sep">·</span>`)}</div>` : ""}<span class="grip" title="끌어서 이동">⋮⋮</span>`;
+    if (list.length) {
+      const lock = c.type === "pr" || locked();
+      h += `<div class="steps" data-type="${esc(c.type)}">`;
+      list.forEach((s, i) => { h += `<button data-stage="${esc(s)}" data-i="${i + 1}" data-n="${list.length}" class="${!off && i < idx ? "on" : !off && i === idx ? "cur" : ""}" ${lock ? "disabled" : ""} aria-label="${esc(STAGE_LABEL[s] || s)}"></button>`; });
+      if (off) h += `<span class="off" data-stage="${esc(stage)}" data-i="0" data-n="${list.length}">${esc(STAGE_LABEL[stage] || stage)}</span>`;
+      h += `</div>`;
+    }
+
+    const chips = [];
+    if (c.owner?.kind && c.owner.kind !== "me") chips.push(`<span class="chip">${esc(OWNER_LABEL[c.owner.kind] || c.owner.kind)}${c.owner.name ? " · " + esc(c.owner.name) : ""}</span>`);
+    if (c.owner?.kind === "me") chips.push(`<span class="chip me">나</span>`);
+    if (c.type === "ask" && c.target) chips.push(`<span class="chip">→ ${esc(c.target)}</span>`);
+    if (c.due && !(delay && c.due < todayISO())) chips.push(`<span class="chip">${esc(md(c.due))}까지</span>`);
+    if (c.type === "pr" && c.probe && c.probe.ok === false) chips.push(`<span class="chip tk fail" title="${esc(c.probe.err || "")}">실측 실패 ${esc(fmtAt(c.probe.at))}</span>`);
+    if (c.type === "doc" && stage !== "todo" && !(c.links || []).length) chips.push(`<span class="chip warnc" title="초안이 있으면 문서 링크를 붙여 주세요 (패널 「링크」)">링크 없음</span>`);
+    // 링크 행 — 칩과 다른 위계. 티켓·문서·기타 URL
+    const lnks = [];
+    if (prNum && prHref) lnks.push(`<a href="${esc(prHref)}" target="_blank" rel="noopener" title="${esc(prHref)}">${ic("pr")}PR #${esc(prNum)}</a>`);
+    if (c.ticket) {
+      const key = c.ticket.key || (c.ticket.url || "").replace(/^https?:\/\/github\.com\//, "");
+      const href = c.ticket.key ? (S.meta?.jiraBase ? S.meta.jiraBase.replace(/\/?$/, "/") + c.ticket.key : null) : c.ticket.url;
+      const t = c.probe?.ticket, tip = t ? (t.ok === false ? "실측 실패 · 마지막 값 " + fmtAt(t.at) : "실측 " + fmtAt(t.at) + (t.assignee ? " · " + t.assignee : "")) : "미실측";
+      const warn = "";   // 실측 실패는 카드에 안 보인다 — 읽는 사람에게 뜻이 없다. 패널 「티켓」 칸과 sync 보고에만 남긴다.
+      lnks.push((href ? `<a href="${esc(href)}" target="_blank" rel="noopener" title="${esc(tip)}">${ic("ticket")}${esc(key)}</a>` : `<span title="${esc(tip)} · 보드 설정에 Jira 주소(jiraBase)가 없어 링크를 못 만듭니다">${ic("ticket")}${esc(key)}</span>`) + warn);
+    }
+    for (const u of (c.links || []).slice(0, 4)) lnks.push(`<a href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}">${ic(/atlassian\.net\/wiki|notion\.|docs\.google|claude\.ai\/(code\/)?artifact/.test(u) ? "doc" : "ext")}${esc(linkLabel(u))}</a>`);
+    if (chips.length) h += `<div class="chips">${chips.join("")}</div>`;
+    if (lnks.length) h += `<div class="lnks">${lnks.join("")}</div>`;
+    if (delay) h += `<div class="delay" title="${esc(delay.join(" · "))}"><span class="k">지연</span><span>${esc(delay.join(" · "))}</span></div>`;
+    return h + `</div>`;
+  },
+  card(id) {
+    const el = $(`.card[data-id="${CSS.escape(id)}"]`), c = S.cards.get(id);
+    if (!el || !c) return Render.grid();
+    if (!visible(c) || c.archived) return Render.grid();
+    const tmp = document.createElement("div"); tmp.innerHTML = Render.cardHTML(c); el.replaceWith(tmp.firstElementChild);
+  },
+  panel() {
+    const p = $("#panel"), w = $("#wrap"), pn = S.ui.panel;
+    if (!pn) { w.classList.remove("panel-open"); p.innerHTML = ""; return; }
+    w.classList.add("panel-open");
+    if (pn.kind === "card") Panel.card(p, pn.id);
+    else if (pn.kind === "row" || pn.kind === "col") Panel.header(p, pn);
+    else if (pn.kind === "archive") Panel.archive(p);
+  },
+};
+
+// ───────────────────────── Panel ─────────────────────────
+const Panel = {
+  open(pn) { S.ui.panel = pn; Render.all(); },
+  close() { S.ui.panel = null; Render.all(); },
+  head(label, extra = "") { return `<div class="ph"><span class="lab">${label}</span>${extra}<button class="x" data-close="1" title="닫기 (Esc)">✕</button></div>`; },
+  sel(name, opts, val, extraAttr = "") { return `<select name="${name}" ${extraAttr}>${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`; },
+  card(p, id) {
+    const c = S.cards.get(id);
+    if (!c) { S.ui.panel = null; p.innerHTML = ""; $("#wrap").classList.remove("panel-open"); return; }
+    const active = document.activeElement, keepName = active && p.contains(active) && active.name;
+    if (keepName && p.dataset.id === id) return;  // 타이핑 중이면 패널을 갈지 않는다
+    p.dataset.id = id;
+    const rows = (S.meta?.rows || []).map((r) => [r.id, r.label + (r.sub ? " · " + r.sub : "")]);
+    const cols = (S.meta?.cols || []).map((x) => [x.id, x.label + (x.start ? ` (${md(x.start)}~${md(x.end)})` : "")]);
+    const stages = (STAGES[c.type] || []).map((s) => [s, STAGE_LABEL[s] || s]);
+    const isPr = c.type === "pr", ro = locked() ? "disabled" : "";
+    const others = [...S.cards.values()].filter((o) => o.id !== id && !o.archived).sort((a, b) => (a.pos?.row || "").localeCompare(b.pos?.row || "") || ordCompare(a.pos?.ord || "", b.pos?.ord || ""));
+    let h = Panel.head(`${esc(TYPE_LABEL[c.type] || c.type)} 카드`, `<span class="lab" style="flex:0;color:var(--faint)">${esc(id)}</span>`);
+    h += `<div class="body"><form id="cf" autocomplete="off">
+      <div class="f"><label>제목</label><input name="title" value="${esc(c.title)}" ${ro}></div>
+      <div class="f"><div class="row2"><div><label>타입</label>${Panel.sel("type", TYPES.map((t) => [t, TYPE_LABEL[t]]), c.type, ro)}</div><div><label>단계${isPr ? " (실측)" : ""}</label>${isPr ? `<div class="ro"><b>${esc(STAGE_LABEL[displayStage(c)] || displayStage(c))}</b>${c.probe?.at ? ` · ${esc(fmtAt(c.probe.at))}` : " · 미실측"}</div>` : Panel.sel("stage", stages, c.stage || stages[0]?.[0], ro)}</div></div></div>
+      <div class="f"><div class="row2"><div><label>행</label>${Panel.sel("row", rows, c.pos?.row, ro)}</div><div><label>열</label>${Panel.sel("col", cols, c.pos?.col, ro)}</div></div></div>
+      <div class="f"><div class="row2"><div><label>담당</label>${Panel.sel("ownerKind", Object.entries(OWNER_LABEL), c.owner?.kind || "me", ro)}</div><div><label>이름</label><input name="ownerName" value="${esc(c.owner?.name || "")}" placeholder="사람·팀 이름" ${ro}></div></div></div>
+      <div class="f"><div class="row2"><div><label>기한</label><input type="date" name="due" value="${esc(c.due || "")}" ${ro}></div>${c.type === "ask" ? `<div><label>요청 대상</label><input name="target" value="${esc(c.target || "")}" placeholder="팀 / 사람 / 외부사" ${ro}></div>` : c.type === "infra" ? `<div><label>환경</label>${Panel.sel("env", [["", "—"], ...Object.entries(ENV_LABEL)], c.env || "", ro)}<div class="help">prod는 티켓을 미리(요청함), 생성은 배포 직전(만드는 중)</div></div>` : "<div></div>"}</div></div>
+      ${isPr ? `<div class="f"><label>PR URL</label><input name="pr" value="${esc(c.pr || "")}" placeholder="https://github.com/…/pull/123" ${ro}></div>
+      <div class="f"><label>브랜치</label><input name="branch" value="${esc(c.branch || "")}" placeholder="feature/…" ${ro}><div class="help">PR이 없으면 원격 브랜치 유무로 착수 전/작업 중을 판정합니다.</div></div>` : ""}
+      ${c.type === "ask" || c.type === "infra" || c.ticket ? `<div class="f"><label>티켓</label><input name="ticket" value="${esc(c.ticket?.key || c.ticket?.url || "")}" placeholder="ISE-1624 또는 GitHub Issue URL" ${ro}>${c.probe?.ticket ? `<div class="ro" style="margin-top:4px">${c.probe.ticket.ok === false ? "실측 실패 · " : ""}<b>${esc(c.probe.ticket.status || "—")}</b>${c.probe.ticket.assignee ? " · " + esc(c.probe.ticket.assignee) : ""} · ${esc(fmtAt(c.probe.ticket.at))}</div>` : ""}</div>` : ""}
+      <div class="f"><label>메모 (카드에는 한 줄만 보입니다)</label><textarea name="note" ${ro}>${esc(c.note || "")}</textarea></div>
+      <div class="f"><label>지연 사유</label><input name="delayNote" value="${esc(c.delayNote || "")}" placeholder="비우면 자동 판정만 표시 (기한 · 열 기간 · 막힘)" ${ro}>${delayOf(c) ? `<div class="help">지금 표시: ${esc(delayOf(c).join(" · "))}</div>` : ""}</div>
+      <div class="f"><label>링크 (한 줄에 하나)</label><textarea name="links" ${ro}>${esc((c.links || []).join("\n"))}</textarea></div>
+      <div class="f"><label>막는 카드 (blockedBy)</label><div class="blist">${others.map((o) => `<label style="--c:var(--c-${esc(o.type)})"><input type="checkbox" name="blockedBy" value="${esc(o.id)}" ${(c.blockedBy || []).includes(o.id) ? "checked" : ""} ${ro}><span class="k">${esc(TYPE_LABEL[o.type] || o.type)}</span><span>${esc(o.title)}</span>${cardDone(o) ? `<span class="k" style="color:var(--faint)">완료</span>` : ""}</label>`).join("") || `<div class="help">다른 카드가 없습니다.</div>`}</div></div>
+      ${isPr && c.probe?.pr ? `<div class="f"><label>실측 근거</label><div class="ro">state <b>${esc(c.probe.pr.state)}</b>${c.probe.pr.isDraft ? " · draft" : ""} · decision <b>${esc(c.probe.pr.decision || "—")}</b> · 타인 리뷰 <b>${esc(c.probe.pr.otherReviews ?? 0)}</b> · 코멘트 <b>${esc(c.probe.pr.otherComments ?? 0)}</b>${c.probe.branch ? ` · 브랜치 ${c.probe.branch.exists ? "있음" : "없음"}` : ""}</div></div>` : ""}
+      <div class="f"><div class="help mono">만든 날 ${esc(fmtAt(c.createdAt))} · 수정 ${esc(fmtAt(c.updatedAt))}</div></div>
+      <div class="btns">${locked() ? "" : `<button type="button" class="btn bad" data-archive="1">보관</button>`}<button type="button" class="btn" data-close="1">닫기</button></div>
+    </form></div>`;
+    p.innerHTML = h;
+  },
+  header(p, pn) {
+    const isRow = pn.kind === "row", list = isRow ? S.meta.rows : S.meta.cols, idx = list.findIndex((x) => x.id === pn.id), it = list[idx];
+    if (!it) { Panel.close(); return; }
+    const active = document.activeElement; if (active && p.contains(active) && active.name && p.dataset.id === pn.kind + ":" + pn.id) return;
+    p.dataset.id = pn.kind + ":" + pn.id;
+    const count = [...S.cards.values()].filter((c) => !c.archived && (isRow ? c.pos?.row === it.id : c.pos?.col === it.id)).length;
+    const ro = locked() ? "disabled" : "", fixed = !!it.fixed;
+    let h = Panel.head(isRow ? "행 편집" : "열 편집", `<span class="lab" style="flex:0;color:var(--faint)">${esc(it.id)}</span>`);
+    h += `<div class="body"><form id="hf" autocomplete="off">
+      <div class="f"><label>이름</label><input name="label" value="${esc(it.label)}" ${ro}></div>
+      ${isRow ? `<div class="f"><label>설명 (헤더에 크게 보이는 이름)</label><input name="sub" value="${esc(it.sub || "")}" placeholder="service-server · customer-web · 정보보호팀" ${ro}></div>
+      <div class="f"><div class="row2"><div><label>작업 종류</label>${Panel.sel("kind", [["", "—"], ...Object.entries(ROW_KIND)], rowKind(it) || "", ro)}</div><div><label>기본 카드 타입</label>${Panel.sel("type", [["", "—"], ...TYPES.map((t) => [t, TYPE_LABEL[t]])], it.type || "", ro)}</div></div></div>`
+      : fixed ? `<div class="f"><div class="help">시점이 정해지지 않은 카드가 사는 고정 열입니다. 이동·삭제할 수 없습니다.</div></div>`
+      : `<div class="f"><div class="row2"><div><label>시작</label><input type="date" name="start" value="${esc(it.start || "")}" ${ro}></div><div><label>끝</label><input type="date" name="end" value="${esc(it.end || "")}" ${ro}></div></div></div>
+      <div class="f"><label>메모</label><input name="note" value="${esc(it.note || "")}" placeholder="10/13 오픈" ${ro}></div>`}
+      <div class="f"><div class="help mono">카드 ${count}장</div></div>
+      <div class="btns">${locked() ? "" : `${fixed ? "" : `<button type="button" class="btn" data-move="-1" ${idx <= (isRow ? 0 : 1) ? "disabled" : ""}>↑ 앞으로</button><button type="button" class="btn" data-move="1" ${idx >= list.length - 1 ? "disabled" : ""}>↓ 뒤로</button>`}<button type="button" class="btn" data-addafter="1">＋ 뒤에 추가</button>${fixed ? "" : `<button type="button" class="btn bad" data-del="1" ${count ? "disabled title=\"카드가 있는 동안 삭제할 수 없습니다\"" : ""}>삭제</button>`}`}<button type="button" class="btn" data-close="1">닫기</button></div>
+    </form></div>`;
+    p.innerHTML = h;
+  },
+  archive(p) {
+    const list = [...S.cards.values()].filter((c) => c.archived).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    p.dataset.id = "archive";
+    p.innerHTML = Panel.head("보관함") + `<div class="body"><div class="alist">${list.map((c) => `<div><span class="k mono" style="color:var(--c-${esc(c.type)});font-size:10px;font-weight:700">${esc(TYPE_LABEL[c.type] || c.type)}</span><span class="t">${esc(c.title)}</span><span class="w">${esc(fmtAt(c.updatedAt))}</span>${locked() ? "" : `<button class="btn" data-restore="${esc(c.id)}">복구</button>`}</div>`).join("") || `<div class="help" style="padding:12px 0">보관된 카드가 없습니다.</div>`}</div></div>`;
+  },
+  // 폼 change → 카드 update
+  onCardChange(e) {
+    const f = e.target.closest("form#cf"); if (!f) return;
+    const id = $("#panel").dataset.id, c = S.cards.get(id); if (!c) return;
+    const name = e.target.name, v = e.target.value, prev = clone(c), patch = {};
+    if (name === "title") patch.title = v.trim();
+    else if (name === "type") { patch.type = v; patch.stage = STAGES[v]?.[0] || ""; }
+    else if (name === "stage") patch.stage = v;
+    else if (name === "row") patch.pos = { row: v, ord: between(cellCards(v, c.pos.col).filter((o) => o.id !== id).at(-1)?.pos.ord || null, null) };
+    else if (name === "col") patch.pos = { col: v, ord: between(cellCards(c.pos.row, v).filter((o) => o.id !== id).at(-1)?.pos.ord || null, null) };
+    else if (name === "ownerKind") patch.owner = { kind: v, name: c.owner?.name || "" };
+    else if (name === "ownerName") patch.owner = { kind: c.owner?.kind || "me", name: v.trim() };
+    else if (name === "due") patch.due = v || null;
+    else if (name === "target") patch.target = v.trim() || null;
+    else if (name === "env") patch.env = v || null;
+    else if (name === "pr") patch.pr = v.trim() || null;
+    else if (name === "branch") patch.branch = v.trim() || null;
+    else if (name === "ticket") { const t = v.trim(); patch.ticket = !t ? null : /^https?:\/\//.test(t) ? { url: t } : { key: t.toUpperCase() }; }
+    else if (name === "note") patch.note = v;
+    else if (name === "delayNote") patch.delayNote = v.trim() || null;
+    else if (name === "links") patch.links = v.split("\n").map((s) => s.trim()).filter(Boolean);
+    else if (name === "blockedBy") { const ids = [...f.querySelectorAll('input[name=blockedBy]:checked')].map((i) => i.value); patch.blockedBy = ids; if (ids.length && !(c.blockedBy || []).length) patch.blockedAt = nowISO(); if (!ids.length) patch.blockedAt = null; }
+    else return;
+    Store.update(id, patch, () => { S.cards.set(id, prev); });
+    // 타입·위치·막힘은 패널 구조가 바뀌므로 "타이핑 중 보존" 가드를 풀고 다시 그린다
+    if (name === "type" || name === "row" || name === "col" || name === "blockedBy") { $("#panel").dataset.id = ""; Render.all(); }
+  },
+  onHeaderChange(e) {
+    const f = e.target.closest("form#hf"); if (!f) return;
+    const [kind, id] = $("#panel").dataset.id.split(":"), key = kind === "row" ? "rows" : "cols", list = clone(S.meta[key]), it = list.find((x) => x.id === id); if (!it) return;
+    const name = e.target.name, v = e.target.value.trim();
+    if (name === "label") it.label = v || it.label; else if (name === "sub") it.sub = v; else if (name === "type") it.type = v || null;
+    else if (name === "kind") { it.kind = v || null; if (v && KIND_TYPE[v]) it.type = KIND_TYPE[v]; }
+    else if (name === "start") it.start = v || null; else if (name === "end") it.end = v || null; else if (name === "note") it.note = v; else return;
+    Store.updateMeta({ [key]: list });
+  },
+  headerAction(btn) {
+    const [kind, id] = $("#panel").dataset.id.split(":"), key = kind === "row" ? "rows" : "cols", list = clone(S.meta[key]), idx = list.findIndex((x) => x.id === id);
+    if (btn.dataset.move) { const to = idx + Number(btn.dataset.move); if (to < (kind === "row" ? 0 : 1) || to >= list.length) return; [list[idx], list[to]] = [list[to], list[idx]]; Store.updateMeta({ [key]: list }); }
+    else if (btn.dataset.addafter) {
+      const nid = (kind === "row" ? "r_" : "c_") + Date.now().toString(36);
+      list.splice(idx + 1, 0, kind === "row" ? { id: nid, label: "새 행", sub: "", type: null } : { id: nid, label: "새 열", start: null, end: null, note: "" });
+      Store.updateMeta({ [key]: list }).then((ok) => ok && Panel.open({ kind, id: nid }));
+    }
+    else if (btn.dataset.del) { if ([...S.cards.values()].some((c) => !c.archived && (kind === "row" ? c.pos?.row === id : c.pos?.col === id))) return toast("카드가 있는 동안 삭제할 수 없습니다", true); list.splice(idx, 1); Store.updateMeta({ [key]: list }).then(() => Panel.close()); }
+  },
+};
+
+// ───────────────────────── 카드 생성·단계·보관 ─────────────────────────
+function addCard(row, col) {
+  const r = rowOf(row), type = (r && r.type) || "pr", last = cellCards(row, col).at(-1);
+  const card = { id: newId(), type, title: "새 카드", note: "", links: [], owner: { kind: type === "ask" || type === "decision" ? "me" : "agent", name: "" }, due: null, blockedBy: [], blockedAt: null, archived: false,
+    branch: null, pr: null, target: null, ticket: null, stage: STAGES[type][0], pos: { row, col, ord: between(last?.pos.ord || null, null) }, probe: null, createdAt: nowISO(), updatedAt: nowISO() };
+  Store.create(card).then((ok) => { if (ok) { Panel.open({ kind: "card", id: card.id }); const i = $("#panel input[name=title]"); if (i) { i.focus(); i.select(); } } });
+}
+function setStage(id, stage) {
+  const c = S.cards.get(id); if (!c || c.type === "pr") return;
+  const prev = c.stage; if (prev === stage) return;
+  Store.update(id, { stage }, () => { c.stage = prev; });
+  Render.all();
+}
+function archiveCard(id, flag) {
+  const c = S.cards.get(id); if (!c) return; const prev = c.archived;
+  Store.update(id, { archived: flag }, () => { c.archived = prev; });
+  if (flag) Panel.close(); else Render.all();
+}
+
+// ───────────────────────── DnD (pointer) ─────────────────────────
+const DnD = (() => {
+  let cand = null, raf = 0, lastXY = null;
+  const grid = $("#grid");
+  const cardsIn = (cell) => [...cell.querySelectorAll(":scope > .card")];
+  function begin(e, el) {
+    const id = el.dataset.id, rect = el.getBoundingClientRect();
+    const cl = el.cloneNode(true); cl.classList.add("drag-clone"); cl.classList.remove("sel"); cl.style.width = rect.width + "px"; cl.style.left = rect.left + "px"; cl.style.top = rect.top + "px"; document.body.appendChild(cl);
+    el.classList.add("ghost");
+    S.ui.drag = { id, el, clone: cl, dx: e.clientX - rect.left, dy: e.clientY - rect.top, from: { cell: el.parentElement, next: el.nextElementSibling } , overCell: el.parentElement, pointerId: e.pointerId };
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    grid.classList.add("dragging");
+    loop();
+  }
+  function loop() { raf = requestAnimationFrame(() => { if (!S.ui.drag) return; autoScroll(); loop(); }); }
+  function autoScroll() {
+    if (!lastXY) return; const r = grid.getBoundingClientRect(), m = 40, sp = 14; const [x, y] = lastXY;
+    if (x < r.left + m) grid.scrollLeft -= sp; else if (x > r.right - m) grid.scrollLeft += sp;
+    if (y < r.top + m) grid.scrollTop -= sp; else if (y > r.bottom - m) grid.scrollTop += sp;
+  }
+  function move(e) {
+    const d = S.ui.drag; lastXY = [e.clientX, e.clientY];
+    d.clone.style.left = (e.clientX - d.dx) + "px"; d.clone.style.top = (e.clientY - d.dy) + "px";
+    const under = document.elementFromPoint(e.clientX, e.clientY), cell = under && under.closest(".cell");
+    if (!cell) return;
+    if (d.overCell !== cell) { d.overCell && d.overCell.classList.remove("over"); cell.classList.add("over"); d.overCell = cell; }
+    const others = cardsIn(cell).filter((c) => c !== d.el);
+    let before = null;
+    for (const c of others) { const r = c.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { before = c; break; } }
+    const add = cell.querySelector(":scope > .add");
+    if (before) { if (d.el.nextElementSibling !== before) cell.insertBefore(d.el, before); }
+    else if (d.el.nextElementSibling !== add) cell.insertBefore(d.el, add);
+  }
+  function end(commit) {
+    const d = S.ui.drag; if (!d) return;
+    S.ui.drag = null; cancelAnimationFrame(raf); lastXY = null; grid.classList.remove("dragging");
+    d.clone.remove(); d.el.classList.remove("ghost"); d.overCell && d.overCell.classList.remove("over");
+    try { d.el.releasePointerCapture(d.pointerId); } catch (_) {}
+    if (commit) {
+      const cell = d.el.parentElement, row = cell.dataset.row, col = cell.dataset.col, c = S.cards.get(d.id);
+      const sib = cardsIn(cell), i = sib.indexOf(d.el);
+      let prev = sib[i - 1] ? S.cards.get(sib[i - 1].dataset.id) : null, next = sib[i + 1] ? S.cards.get(sib[i + 1].dataset.id) : null;
+      if (cell.classList.contains("fold") || cell.classList.contains("rfold")) { prev = cellCards(row, col).filter((x) => x.id !== d.id).at(-1) || null; next = null; }
+      const moved = !(c.pos.row === row && c.pos.col === col && (prev ? prev.pos.ord < c.pos.ord : true) && (next ? c.pos.ord < next.pos.ord : true));
+      if (c && moved) {
+        const before = clone(c.pos);
+        let ord; try { ord = between(prev?.pos.ord || null, next?.pos.ord || null); } catch (_) { ord = between(prev?.pos.ord || null, null); }
+        c.pos = { row, col, ord };
+        Store.update(d.id, { pos: { row, col, ord } }, () => { c.pos = before; });
+      }
+    }
+    if (S.ui.deferred) { const snap = S.ui.deferred; S.ui.deferred = null; Store.applyCards(snap); } else Render.grid();
+  }
+  grid.addEventListener("pointerdown", (e) => {
+    if (locked() || e.button !== 0) return;
+    const el = e.target.closest(".card"); if (!el || e.target.closest("button, a, input")) return;
+    if (e.pointerType === "touch" && !e.target.closest(".grip")) return;
+    cand = { el, x: e.clientX, y: e.clientY, e };
+  });
+  grid.addEventListener("pointermove", (e) => {
+    if (S.ui.drag) return move(e);
+    if (!cand) return;
+    if (Math.hypot(e.clientX - cand.x, e.clientY - cand.y) > 4) { const c = cand; cand = null; begin(c.e, c.el); move(e); }
+  });
+  grid.addEventListener("pointerup", () => { if (S.ui.drag) end(true); cand = null; });
+  grid.addEventListener("pointercancel", () => { if (S.ui.drag) end(false); cand = null; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (S.ui.drag) end(false); else if (S.ui.panel) Panel.close(); } });
+  return {};
+})();
+
+// ───────────────────────── 이벤트 위임 ─────────────────────────
+$("#grid").addEventListener("click", (e) => {
+  const st = e.target.closest(".steps button"); if (st) { const card = st.closest(".card"); setStage(card.dataset.id, st.dataset.stage); return; }
+  if (e.target.closest("a")) return;
+  const to = e.target.closest(".blk .to"); if (to) { const el = $("#grid").querySelector(`.card[data-id="${to.dataset.to}"]`); if (!el) { toast("막는 카드가 접힌 열이나 숨김 안에 있습니다", true); return; } el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); return; }
+  const ab = e.target.closest(".ab"); if (ab) { const card = ab.closest(".card"); if (ab.dataset.ask !== undefined) askClaude(card); else copyContext(card.dataset.id); return; }
+  const add = e.target.closest(".add"); if (add) { const cell = add.closest(".cell"); addCard(cell.dataset.row, cell.dataset.col); return; }
+  const fb = e.target.closest("[data-fold]"); if (fb) { toggleFold(fb.dataset.fold); return; }
+  const hc = e.target.closest(".hcol .hbtn"); if (hc) { if (hc.closest(".hcol").classList.contains("fold")) { toggleFold(hc.dataset.col); return; } if (locked()) return; Panel.open({ kind: "col", id: hc.dataset.col }); return; }
+  const rfb = e.target.closest("[data-rfold]"); if (rfb) { toggleRowFold(rfb.dataset.rfold); return; }
+  const hr = e.target.closest(".hrow .hbtn"); if (hr) { if (hr.closest(".hrow").classList.contains("fold")) { toggleRowFold(hr.dataset.row); return; } if (locked()) return; Panel.open({ kind: "row", id: hr.dataset.row }); return; }
+  const corner = e.target.closest(".hcorner"); if (corner) { if (locked() || !S.meta) return; if (!S.meta.rows.length) { Store.updateMeta({ rows: [{ id: "r_" + Date.now().toString(36), label: "새 행", sub: "", type: null }] }); } return; }
+  const card = e.target.closest(".card"); if (card) { Panel.open({ kind: "card", id: card.dataset.id }); }
+});
+// 스텝 바 호버 툴팁 — 네이티브 title은 1초 뒤에 떠서 5px짜리 칸에서는 아무도 못 본다
+$("#grid").addEventListener("pointerover", (e) => {
+  const el = e.target.closest(".steps button, .steps .off"); if (!el || e.pointerType === "touch") return;
+  const type = el.closest(".steps").dataset.type, st = el.dataset.stage, lock0 = (t) => t === "pr";
+  const tip = $("#tip"), r = el.getBoundingClientRect(), vm = locked() && !lock0(type);
+  const pos = el.classList.contains("off") ? "경로 밖" : `${el.dataset.i}/${el.dataset.n}`;
+  tip.innerHTML = `<span class="h"><span class="mono">${esc(pos)}</span>${esc(STAGE_LABEL[st] || st)}</span><span class="d">${esc(STAGE_DESC[type]?.[st] || "")}</span><span class="k">${lock0(type) ? "에이전트가 GitHub에서 실측 · 클릭 불가" : vm ? "조회 모드 — 편집을 켜면 클릭으로 바꿉니다" : el.classList.contains("off") ? "패널에서 바꿉니다" : "클릭하면 이 단계로"}</span>`;
+  tip.style.left = Math.max(130, Math.min(window.innerWidth - 130, r.left + r.width / 2)) + "px";
+  tip.style.top = r.top + "px";
+  tip.classList.add("show");
+});
+$("#grid").addEventListener("pointerout", (e) => { if (e.target.closest(".steps button, .steps .off")) $("#tip").classList.remove("show"); });
+$("#grid").addEventListener("scroll", () => $("#tip").classList.remove("show"), { passive: true });
+$("#grid").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.classList.contains("card")) Panel.open({ kind: "card", id: e.target.dataset.id }); });
+$("#panel").addEventListener("change", (e) => { Panel.onCardChange(e); Panel.onHeaderChange(e); });
+$("#panel").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.close) return Panel.close();
+  if (b.dataset.archive) return archiveCard($("#panel").dataset.id, true);
+  if (b.dataset.restore) return archiveCard(b.dataset.restore, false);
+  if (b.closest("form#hf")) return Panel.headerAction(b);
+});
+$("#panel").addEventListener("submit", (e) => e.preventDefault());
+$("#f-mine").addEventListener("click", () => { S.ui.mine = !S.ui.mine; Render.all(); });
+$("#f-done").addEventListener("click", () => { S.ui.hideDone = !S.ui.hideDone; Render.all(); });
+$("#mode").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; const edit = b.dataset.mode === "edit"; if (edit === !S.ui.viewMode) return; setMode(edit); });
+$("#f-fold").addEventListener("click", () => setAutoFold(!S.ui.autoFold));
+$("#f-arch").addEventListener("click", () => { S.ui.panel?.kind === "archive" ? Panel.close() : Panel.open({ kind: "archive" }); });
+
+// ───────────────────────── 데모 데이터 (?demo) ─────────────────────────
+const DEMO = (() => {
+  const t = todayISO(), d = new Date(); d.setDate(d.getDate() - 10);
+  const iso = (x) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+  const s0 = iso(d), plus = (n) => { const x = new Date(d); x.setDate(x.getDate() + n); return iso(x); };
+  const cols = [{ id: "unset", label: "미정", fixed: true }, { id: "p0", label: "M0 선행", start: s0, end: plus(6), note: "" }, { id: "p1", label: "M1 핵심 경로", start: plus(7), end: plus(13), note: "" }, { id: "p2", label: "M2 운영", start: plus(14), end: plus(20), note: "" }, { id: "p3", label: "M3 릴리스", start: plus(21), end: plus(27), note: "오픈" }];
+  const rows = [{ id: "r_api", label: "T0", sub: "api-spec", kind: "code", type: "pr" }, { id: "r_svc", label: "T1", sub: "service-server", kind: "code", type: "pr" }, { id: "r_web", label: "T4", sub: "customer-web", kind: "code", type: "pr" }, { id: "r_ops", label: "T6", sub: "ops · 환경", kind: "infra", type: "infra" }, { id: "r_ext", label: "관문 · 회신", sub: "사람 · 외부", kind: "ask", type: "ask" }];
+  const mk = (id, type, title, row, col, ord, extra = {}) => ({ id, type, title, note: "", links: [], owner: { kind: "me", name: "" }, due: null, blockedBy: [], blockedAt: null, archived: false, branch: null, pr: null, target: null, ticket: null, stage: STAGES[type][0], pos: { row, col, ord }, probe: null, createdAt: "2026-09-10T01:00:00Z", updatedAt: "2026-09-18T01:00:00Z", ...extra });
+  const cards = [
+    mk("c1", "pr", "#805 HANPASS provider · 파트너 세션 계약", "r_api", "p0", "V", { pr: "https://github.com/example/repo/pull/805", probe: { stage: "merged", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 805, state: "MERGED", isDraft: false, decision: "APPROVED", otherReviews: 2, otherComments: 1 } } }),
+    mk("c2", "pr", "#813 월렛 결제 게이트웨이·서명기·콜백", "r_svc", "p1", "V", { pr: "https://github.com/example/repo/pull/813", branch: "feature/phase1-payment", probe: { stage: "review", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 813, state: "OPEN", isDraft: false, decision: "", otherReviews: 1, otherComments: 6 }, branch: { exists: true } } }),
+    mk("c3", "pr", "환불 분기 — CancellationPolicy provider", "r_svc", "p2", "V", { branch: "feature/phase2-refund", blockedBy: ["c2", "c9"], blockedAt: "2026-09-18T01:00:00Z", probe: { stage: "todo", at: "2026-09-19T00:00:00Z", ok: true, branch: { exists: false } } }),
+    mk("c4", "pr", "#821 채널 문구·FAQ·외부 링크", "r_web", "p1", "V", { pr: "https://github.com/example/repo/pull/821", probe: { stage: "draft", at: "2026-09-19T00:00:00Z", ok: true, pr: { number: 821, state: "OPEN", isDraft: true, decision: "", otherReviews: 0, otherComments: 0 } } }),
+    mk("c5", "qa", "로그인 뒤 화면 대조 (결제·완료·내 예약)", "r_web", "p1", "k", { stage: "in_progress", note: "재채번 후 test-env 재배포가 먼저", blockedBy: ["c9"], blockedAt: "2026-09-18T01:00:00Z" }),
+    mk("c6", "qa", "실기기 — 새 창·mailto·지도 링크", "r_web", "p3", "V", { stage: "todo", due: plus(24) }),
+    mk("c7", "infra", "prod 시크릿 HANPASS_* 5종 + 폴링 잡", "r_ops", "p2", "V", { stage: "planned", owner: { kind: "person", name: "루카스" } }),
+    mk("c8", "infra", "egress IP · test-env 개통", "r_ops", "p0", "V", { stage: "done" }),
+    mk("c9", "decision", "DB 마이그레이션 번호 재채번", "r_ops", "p1", "V", { stage: "pending", due: plus(9), note: "V45·V46 ↔ #790 충돌" }),
+    mk("c10", "ask", "보안성 검토 신청", "r_ext", "p1", "V", { stage: "waiting", target: "정보보호팀", ticket: { key: "ISE-1624" }, probe: { stage: null, at: "2026-09-19T00:00:00Z", ok: true, ticket: { key: "ISE-1624", status: "정책진단 대기", assignee: "보안담당", at: "2026-09-19T00:00:00Z", ok: true } } }),
+    mk("c11", "ask", "Slack 질의 v4 게시 (Q15·Q1·P2)", "r_ext", "p1", "k", { stage: "todo", target: "파트너 채널", due: plus(8) }),
+    mk("c12", "doc", "ops 런북 (시크릿·배포 순서)", "r_ops", "p2", "k", { stage: "draft", owner: { kind: "agent", name: "" } }),
+    mk("c13", "ask", "CBT 환경 확정 — prod인지 test-env인지", "r_ext", "unset", "V", { stage: "requested", target: "Luke · Teo", ticket: { url: "https://github.com/example/repo/issues/42" }, probe: { stage: null, at: "2026-09-18T00:00:00Z", ok: false, err: "403", ticket: { url: "https://github.com/example/repo/issues/42", status: "open", at: "2026-09-17T00:00:00Z", ok: false, err: "403" } } }),
+    mk("c14", "pr", "옛 브랜치 (폐기)", "r_svc", "p0", "V", { archived: true, stage: "closed" }),
+  ];
+  return { meta: { schemaVersion: 1, title: "데모 · 파트너 채널 연동", ticket: "DEMO-0000", repo: "example/repo", branchPrefix: "feature/", rows, cols, updatedAt: "2026-09-19T00:00:00Z" }, sync: { at: "2026-09-19T00:00:00Z", by: "agent", probed: 5, failed: 1, schemaVersion: 1 }, cards };
+})();
+
+Store.init();
+})();
+</script>
+</body>
+</html>
