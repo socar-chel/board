@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>📋 작업 보드 | BOARD-TITLE</title>
 <!--
-  board — 행(앱/리포/타입) × 열(시간) 격자에 카드를 놓는 프로젝트 진행판 + 같은 페이지의 런북 탭.
-  데이터는 전부 아티팩트 db(meta/board · meta/sync · cards/<id> · meta/runbook · runbook/<절id>)에 있고 이 파일은 프로젝트마다 그대로 게시한다.
+  board — 행(앱/리포/타입) × 열(시간) 격자에 카드를 놓는 프로젝트 진행판 + 같은 페이지의 런북·릴리스 탭.
+  데이터는 전부 아티팩트 db(meta/board · meta/sync · cards/<id> · meta/runbook · runbook/<절id> · meta/release · release/<항목id>)에 있고 이 파일은 프로젝트마다 그대로 게시한다.
   스키마·쓰기 주체 규칙은 skills/board/schema.md. ORDER/STAGES 블록은 scripts/lib 복제본이다(테스트가 동일성 검사).
   `?demo`로 열면 내장 샘플로 렌더한다(로컬 검증용).
 -->
@@ -293,6 +293,74 @@
   #docview #rb .rb-flash { animation: rbflash 1.8s ease-out; }
   @keyframes rbflash { 0%, 50% { box-shadow: 0 0 0 3px var(--signal); background: var(--signal-soft); } 100% { box-shadow: none; } }
   @media (prefers-reduced-motion: reduce) { #docview #rb .rb-flash { animation: none; outline: 2px solid var(--signal); } }
+
+  /* ── 릴리스 탭 — 단계(배포 전·당일·이후) × 순서 있는 체크 항목 ── */
+  body.tab-rel .bar .bo:not(#mode) { display: none; }
+  .relview { min-height: 0; height: 100%; display: grid; grid-template-columns: 1fr 0; background: var(--paper); }
+  .relview.panel-open { grid-template-columns: 1fr 380px; }
+  /* 열 구분선이 항목 수와 무관하게 화면 바닥까지 — 스크롤 영역을 세로 flex로 두고 열 격자가 남은 높이를 채운다 */
+  .relview .rmain { overflow: auto; min-height: 0; overscroll-behavior: contain; display: flex; flex-direction: column; }
+  .relview.panel-open .panel { display: block; }
+  .rel-empty { padding: 48px 24px; color: var(--muted); font-size: 14px; }
+  .rel-hd { position: sticky; top: 0; z-index: 3; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 12px 20px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .rel-hd h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  .rel-hd .dd { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--paper); background: var(--signal); border-radius: 999px; padding: 2px 9px; }
+  .rel-hd .dd.past { background: var(--muted); }
+  .rel-hd .meta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); display: inline-flex; gap: 10px; align-items: center; }
+  .rel-hd .meta a { border: 0; display: inline-flex; gap: 4px; align-items: center; }
+  .rel-hd .sp { flex: 1; }
+  .rel-hd .tot { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pbar { display: inline-block; width: 120px; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; vertical-align: middle; }
+  .pbar > i { display: block; height: 100%; background: var(--good); }
+  .rel-refs { padding: 0 20px; border-bottom: 1px solid var(--rule); }
+  .rel-refs details { border-bottom: 1px dashed var(--rule); }
+  .rel-refs details:last-child { border-bottom: 0; }
+  .rel-refs summary { cursor: pointer; padding: 8px 0; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .rel-refs .rb { white-space: pre-wrap; font-size: 12.5px; line-height: 1.6; color: var(--ink); padding: 0 0 12px; }
+  /* 단계 머리 높이를 맞춘다 — 각 단계가 부모의 두 행(머리 · 목록)을 서브그리드로 나눠 쓴다 */
+  .rel-cols { flex: 1 0 auto; display: grid; grid-template-columns: repeat(var(--np, 3), minmax(300px, 1fr)); grid-template-rows: auto 1fr; }
+  .rph { border-right: 1px solid var(--rule); min-width: 0; display: grid; grid-row: span 2; grid-template-rows: subgrid; }
+  .rph:last-child { border-right: 0; }
+  .rph-hd { position: sticky; top: var(--relhd, 52px); z-index: 2; background: color-mix(in srgb, var(--raise) 70%, var(--paper)); border-bottom: 1px solid var(--rule); padding: 10px 14px 9px; }
+  .rph-hd .l1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rph-hd .no { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--signal); }
+  .rph-hd .t { font-weight: 700; font-size: 13.5px; }
+  .rph-hd .wn { font-family: var(--mono); font-size: 10.5px; color: var(--muted); background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 8px; }
+  .rph-hd .ct { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rph-hd .l2 { display: flex; align-items: center; gap: 8px; margin-top: 6px; min-height: 18px; }
+  .rph-hd .l2 .pbar { flex: 1; width: auto; }
+  .rph-hd .fin { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--good); background: var(--good-soft); border-radius: 999px; padding: 1px 8px; }
+  .rph.now .rph-hd { background: color-mix(in srgb, var(--signal-soft) 60%, var(--paper)); }
+  .rph.now .rph-hd .t { color: var(--signal); }
+  .rsteps { padding: 8px 8px 12px; }
+  /* 릴리스 카드 — 진행 탭 카드(.card)를 그대로 쓰고 체크박스·커서만 다르다 */
+  .card.rcard { --c: var(--signal); --cs: var(--signal-soft); cursor: pointer; }
+  .card.rcard.next { background: color-mix(in srgb, var(--cs) 60%, var(--paper)); border-color: color-mix(in srgb, var(--c) 45%, var(--rule)); }
+  .card.rcard .tt { font-variant-numeric: tabular-nums; }
+  .card.rcard .rck { flex: none; width: 16px; height: 16px; border: 1.5px solid var(--rule-firm); border-radius: 4px; background: var(--paper); display: inline-flex; align-items: center; justify-content: center; color: var(--paper); font-size: 10px; font-weight: 800; line-height: 1; padding: 0; }
+  .card.rcard .rck:not(.lk):hover { border-color: var(--good); }
+  .card.rcard .rck.on { background: var(--good); border-color: var(--good); }
+  .card.rcard .rck.lk { border-style: dashed; cursor: help; }
+  .card.rcard .rck.lk.on { border-style: solid; }
+  .card.rcard.done .st2 { color: var(--good); }
+  .card .lnks button { color: var(--signal); font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; line-height: 1.5; }
+  .card .lnks button:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .card .note code, .rel-refs code, .rp-how code { font-family: var(--mono); font-size: .92em; background: var(--raise); border: 1px solid var(--rule); border-radius: 4px; padding: 0 3px; }
+  .rsteps .add { display: block; width: 100%; text-align: center; font-size: 12px; color: var(--faint); padding: 6px 8px; border-radius: 8px; border: 1px dashed var(--rule); }
+  .rsteps .add:hover { color: var(--signal); border-color: var(--signal); background: var(--signal-soft); }
+  .ro .rsteps .add { display: none; }
+  .rp-how { white-space: pre-wrap; font-size: 12.5px; line-height: 1.6; background: var(--raise); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+  /* 단계 참고(롤백 등) — 그 단계 목록 맨 위의 접이식. 쓰는 시점에 보이는 자리에 둔다 */
+  .rph-ref { margin-bottom: 8px; border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--rule)); border-radius: 10px; background: var(--warn-soft); }
+  .rph-ref summary { cursor: pointer; padding: 7px 10px; font-size: 12px; font-weight: 700; color: var(--warn); list-style: none; display: flex; align-items: center; gap: 6px; }
+  .rph-ref summary::-webkit-details-marker { display: none; }
+  .rph-ref summary::before { content: "▸"; font-size: 10px; transition: transform .12s; }
+  .rph-ref[open] summary::before { transform: rotate(90deg); }
+  .rph-ref summary .h { margin-left: auto; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--muted); }
+  .rph-ref .rb { white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); padding: 0 10px 9px 22px; }
+  .rph-ref code { font-family: var(--mono); font-size: .92em; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 0 3px; }
+  @media (max-width: 960px) { .rel-cols { grid-template-columns: 1fr; grid-template-rows: none; } .rph { display: block; grid-row: auto; border-right: 0; border-bottom: 1px solid var(--rule-firm); } .rph-hd { position: static; } }
+  @media (max-width: 720px) { .relview.panel-open { grid-template-columns: 0 1fr; } .relview.panel-open .rmain { display: none; } .rel-hd { padding: 10px 12px; position: static; } .rel-refs { padding: 0 12px; } }
 </style>
 </head>
 <body>
@@ -321,7 +389,7 @@
 </svg>
 <header class="bar">
   <h1 id="ttl">보드</h1>
-  <div class="seg tabs" id="tabs" role="tablist" aria-label="보기 전환" hidden><button role="tab" data-tab="board" title="행 × 시간 격자">진행</button><button role="tab" data-tab="doc" id="tab-doc" title="이어받기·절차·결정 로그">런북</button></div>
+  <div class="seg tabs" id="tabs" role="tablist" aria-label="보기 전환" hidden><button role="tab" data-tab="board" title="행 × 시간 격자">진행</button><button role="tab" data-tab="doc" id="tab-doc" title="이어받기·절차·결정 로그">런북</button><button role="tab" data-tab="rel" id="tab-rel" title="배포 전 준비 · 배포 당일 · 배포 이후 체크리스트" hidden>릴리스</button></div>
   <span id="status" class="badge dim">연결 중</span>
   <span class="sp"></span>
   <span class="sync" id="syncinfo"></span>
@@ -348,6 +416,7 @@
   <aside class="panel" id="panel" aria-label="편집"></aside>
 </div>
 <main class="docview" id="docview" aria-label="런북" hidden><style id="rbcss"></style><div id="rb"></div></main>
+<main class="relview" id="relview" aria-label="릴리스" hidden><div class="rmain" id="rmain"></div><aside class="panel" id="rpanel" aria-label="릴리스 단계 편집"></aside></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="tip" id="tip" role="tooltip"></div>
 
@@ -451,7 +520,8 @@ function linkLabel(u) {
 const S = {
   meta: null, sync: null, cards: new Map(), db: null, user: null, demo: false, ready: false,
   rb: { meta: null, secs: new Map(), sig: "", css: "" },
-  ui: { tab: "board", rbTarget: null, panel: null, mine: false, hideDone: false, readOnly: false, pending: new Set(), drag: null, deferred: null, fold: new Set(), foldRows: new Set(), unfold: new Set(), unfoldRows: new Set(), autoFold: false, foldLoaded: false, viewMode: true },
+  rel: { meta: null, steps: new Map(), me: null },
+  ui: { tab: "board", rbTarget: null, relWant: false, rsel: null, panel: null, mine: false, hideDone: false, readOnly: false, pending: new Set(), drag: null, deferred: null, fold: new Set(), foldRows: new Set(), unfold: new Set(), unfoldRows: new Set(), autoFold: false, foldLoaded: false, viewMode: true },
 };
 const displayStage = (c) => c.type === "pr" ? (c.probe?.stage || c.stage || "todo") : (c.stage || STAGES[c.type]?.[0] || "");
 const cardDone = (c) => isDone(c.type, displayStage(c));
@@ -533,13 +603,12 @@ function cardContext(c) {
   const dl = delayOf(c); if (dl) L.push(`지연: ${dl.join(" · ")}`);
   return L.join("\n");
 }
-async function copyContext(id) {
-  const c = S.cards.get(id); if (!c) return;
-  const text = cardContext(c);
+async function copyText(text, ok) {
   try { await navigator.clipboard.writeText(text); }
-  catch (_) { const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (e2) { document.body.removeChild(ta); toast("복사 실패 — 카드 패널의 내용을 직접 복사해 주세요", true); return; } document.body.removeChild(ta); }
-  toast("카드 컨텍스트를 복사했습니다 — 채팅에 붙여 넣으세요");
+  catch (_) { const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (e2) { document.body.removeChild(ta); toast("복사 실패 — 패널의 내용을 직접 복사해 주세요", true); return; } document.body.removeChild(ta); }
+  toast(ok);
 }
+function copyContext(id) { const c = S.cards.get(id); if (c) copyText(cardContext(c), "카드 컨텍스트를 복사했습니다 — 채팅에 붙여 넣으세요"); }
 function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : ""); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
 
 // ───────────────────────── Theme ─────────────────────────
@@ -578,6 +647,10 @@ const Store = {
     // 런북 — 에이전트만 쓴다(runbook-publish). 페이지는 읽기만 한다
     db.doc("meta/runbook").onSnapshot((snap) => { S.rb.meta = snap.exists ? snap.data() : null; Doc.changed(); }, () => {});
     db.collection("runbook").onSnapshot((snap) => { const m = new Map(); for (const d of snap.docs) { const x = d.data(); if (x) m.set(d.id, x); } S.rb.secs = m; Doc.changed(); }, () => {});
+    // 릴리스 — 항목 체크·편집은 페이지와 에이전트가 함께 쓴다. 체크한 사람은 id만 남긴다
+    if (user) { try { S.rel.me = await user.id(); } catch (_) {} }
+    db.doc("meta/release").onSnapshot((snap) => { S.rel.meta = snap.exists ? snap.data() : null; Rel.changed(); }, () => {});
+    db.collection("release").onSnapshot((snap) => { const m = new Map(); for (const d of snap.docs) { const x = d.data(); if (x) m.set(d.id, { ...x, id: x.id || d.id }); } S.rel.steps = m; Rel.changed(); }, (e) => { banner("release 구독 실패: " + e.code, "bad"); });
   },
   applyCards(snap) {
     const next = new Map();
@@ -591,6 +664,8 @@ const Store = {
     // 로컬 검증용 — 실제 게시 계획(runbook-publish plan의 docs/*.json)을 window.__BOARD_DEMO_RUNBOOK__ = {meta, secs}로 끼워 넣을 수 있다
     const dr = window.__BOARD_DEMO_RUNBOOK__ || DEMO.runbook;
     S.rb.meta = clone(dr.meta); S.rb.secs = new Map(dr.secs.map((x) => [x.id, clone(x)])); Doc.changed();
+    const rl = window.__BOARD_DEMO_RELEASE__ || DEMO.release;
+    S.rel.meta = clone(rl.meta); S.rel.steps = new Map(rl.steps.map((x) => [x.id, clone(x)])); S.rel.me = "u_demo"; Rel.changed();
   },
   // 카드 부분 갱신. 낙관 반영은 호출자가 이미 했고, 실패하면 revert()를 부른다.
   async update(id, patch, revert) {
@@ -634,7 +709,7 @@ function banner(text, cls) { let b = $("#banner"); if (!b) { b = document.create
 
 // ───────────────────────── Render ─────────────────────────
 const Render = {
-  all() { Render.bar(); Render.grid(); Render.panel(); },
+  all() { Render.bar(); Render.grid(); Render.panel(); if (S.ui.tab === "rel") Rel.render(); },
   bar() {
     $("#ttl").textContent = S.meta?.title || document.title.replace(/^📋 [^|]*\| /, "");
     const mine = [...S.cards.values()].filter((c) => !c.archived && c.owner?.kind === "me" && !cardDone(c)).length;
@@ -924,7 +999,7 @@ const Doc = {
   },
   changed() {
     const has = !!S.rb.meta;
-    $("#tabs").hidden = !has;
+    syncTabs();
     if (has) $("#tab-doc").textContent = S.rb.meta.label || "런북";
     if (!has && S.ui.tab === "doc") setTab("board");
     if (has && S.ui.rbTarget != null && S.ui.tab !== "doc") setTab("doc", S.ui.rbTarget);
@@ -973,14 +1048,23 @@ const Doc = {
   },
   current() { const a = $("#rb").querySelector(".toc a.on"); const id = a && a.getAttribute("href").slice(1); return (id && $("#rb").querySelector("#" + CSS.escape(id))) || $("#rb").querySelector("section"); },
 };
+// 탭 머리는 탭이 둘 이상일 때만 보인다 — 런북·릴리스는 각자 문서가 게시돼야 생긴다
+function syncTabs() {
+  const rb = !!S.rb.meta, rl = !!S.rel.meta;
+  $("#tabs").hidden = !(rb || rl); $("#tab-doc").hidden = !rb; $("#tab-rel").hidden = !rl;
+  if (rl) $("#tab-rel").textContent = S.rel.meta.label || "릴리스";
+}
 function setTab(tab, target) {
   if (tab === "doc" && !S.rb.meta) { if (target != null) S.ui.rbTarget = target; return; }
+  if (tab === "rel" && !S.rel.meta) { S.ui.relWant = true; return; }
   S.ui.tab = tab; if (target != null) S.ui.rbTarget = target;
   document.body.classList.toggle("tab-doc", tab === "doc");
-  $("#wrap").hidden = tab === "doc"; $("#docview").hidden = tab !== "doc";
+  document.body.classList.toggle("tab-rel", tab === "rel");
+  $("#wrap").hidden = tab !== "board"; $("#docview").hidden = tab !== "doc"; $("#relview").hidden = tab !== "rel";
   $("#tip").classList.remove("show");
   Render.tabs();
   if (tab === "doc") Doc.render();
+  if (tab === "rel") Rel.render();
 }
 Render.tabs = () => {
   $("#tabs").querySelectorAll("[data-tab]").forEach((b) => { const on = b.dataset.tab === S.ui.tab; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
@@ -1000,7 +1084,212 @@ $("#rb-ask").addEventListener("click", () => {
   const el = Doc.current(); if (el) askClaude(el);
 });
 // 첫 화면은 항상 「진행」이다. 해시가 #runbook…이면 그 위치의 런북으로 연다(뷰어가 해시를 넘겨줄 때만)
-{ const r = rbRef(location.hash); if (r != null) S.ui.rbTarget = r; }
+{ const r = rbRef(location.hash); if (r != null) S.ui.rbTarget = r; if (/^#release\b/.test(location.hash)) S.ui.relWant = true; }
+
+// ───────────────────────── 릴리스 탭 ─────────────────────────
+// meta/release: 제목·배포일·티켓·단계(phases)·참고(refs). release/<id>: 순서 있는 체크 항목 하나.
+// 항목에 card(보드 카드 id)가 있으면 체크는 그 카드의 완료 여부를 따른다 — 상태의 정본은 진행 탭이고 여기는 순서만 준다.
+// 순서를 건너뛰어 체크해도 막지 않는다(현장에서 순서가 바뀌는 일은 있다). 대신 건너뛴 항목을 빨간 테두리로 남긴다.
+const relFmt = (t) => esc(t || "").replace(/`([^`\n]+)`/g, "<code>$1</code>");
+const relDays = (iso) => { if (!iso) return null; const a = new Date(iso + "T00:00:00"), b = new Date(todayISO() + "T00:00:00"); return Math.round((a - b) / 86400000); };
+const Rel = {
+  phases() {
+    const ps = (S.rel.meta?.phases || []).filter((p) => p && p.id);
+    const known = new Set(ps.map((p) => p.id));
+    // 단계 id가 meta에 없는 항목은 사라지지 않게 맨 뒤 「단계 없음」에 모은다
+    return [...S.rel.steps.values()].some((s) => !s.archived && !known.has(s.phase)) ? [...ps, { id: "_none", label: "단계 없음", note: "meta/release.phases에 없는 단계" }] : ps;
+  },
+  steps(pid) {
+    const known = new Set((S.rel.meta?.phases || []).map((p) => p.id));
+    return [...S.rel.steps.values()].filter((s) => !s.archived && (pid === "_none" ? !known.has(s.phase) : s.phase === pid))
+      .sort((a, b) => ordCompare(a.ord || "", b.ord || "") || ordCompare(a.id, b.id));
+  },
+  ordered() { return Rel.phases().flatMap((p) => Rel.steps(p.id)); },
+  linked(s) { const c = s.card ? S.cards.get(s.card) : null; return c && !c.archived ? c : null; },
+  done(s) { const c = Rel.linked(s); return c ? cardDone(c) : !!s.check?.done; },
+  num(s) { const ps = Rel.phases(); const pi = ps.findIndex((p) => p.id === s.phase || (p.id === "_none" && !(S.rel.meta?.phases || []).some((x) => x.id === s.phase))); return `${pi + 1}-${pad(Rel.steps(ps[pi]?.id).findIndex((x) => x.id === s.id) + 1)}`; },
+  changed() {
+    syncTabs();
+    if (!S.rel.meta && S.ui.tab === "rel") setTab("board");
+    if (S.rel.meta && S.ui.relWant && S.ui.tab !== "rel") { S.ui.relWant = false; setTab("rel"); return; }
+    if (S.ui.tab === "rel") Rel.render();
+    Render.tabs();
+  },
+  render() {
+    const host = $("#rmain"), m = S.rel.meta;
+    Rel.panel();
+    if (!m) { host.innerHTML = `<div class="rel-empty">릴리스 체크리스트가 아직 없습니다. 에이전트에게 배포 단계를 올려 달라고 하세요.</div>`; return; }
+    const st = host.scrollTop, sl = host.scrollLeft;
+    const ps = Rel.phases(), all = Rel.ordered(), dn = new Map(all.map((s) => [s.id, Rel.done(s)]));
+    const nDone = all.filter((s) => dn.get(s.id)).length, next = all.find((s) => !dn.get(s.id));
+    let lastDone = -1; all.forEach((s, i) => { if (dn.get(s.id)) lastDone = i; });
+    const skip = new Set(all.filter((s, i) => i < lastDone && !dn.get(s.id)).map((s) => s.id));
+    const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+    const dd = relDays(m.date);
+    const tk = m.ticket?.key ? (S.meta?.jiraBase ? `<a href="${esc(S.meta.jiraBase.replace(/\/?$/, "/") + m.ticket.key)}" target="_blank" rel="noopener">${ic("ticket")}${esc(m.ticket.key)}</a>` : `<span>${ic("ticket")}${esc(m.ticket.key)}</span>`) : "";
+    let h = `<div class="rel-hd" id="relhd"><h2>${esc(m.title || "릴리스")}</h2>`;
+    if (m.date) h += `<span class="dd${dd < 0 ? " past" : ""}" title="배포일 ${esc(m.date)}">${dd === 0 ? "D-DAY" : dd > 0 ? "D-" + dd : "D+" + -dd}</span>`;
+    h += `<span class="meta">${m.date ? `<span>${esc(md(m.date))}${m.time ? " " + esc(m.time) : ""}</span>` : ""}${tk}${(m.links || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${ic("ext")}${esc(linkLabel(u))}</a>`).join("")}</span>`;
+    h += `<span class="sp"></span><span class="tot">${nDone}/${all.length}<span class="pbar"><i style="width:${pct(nDone, all.length)}%"></i></span></span>`;
+    h += `</div>`;
+    if ((m.refs || []).length) h += `<div class="rel-refs">${m.refs.map((r) => `<details><summary>${esc(r.title)}</summary><div class="rb">${relFmt(r.body)}</div></details>`).join("")}</div>`;
+    h += `<div class="rel-cols" style="--np:${Math.max(ps.length, 1)}">`;
+    ps.forEach((p, pi) => {
+      const list = Rel.steps(p.id), d = list.filter((s) => dn.get(s.id)).length, open = list.length - d;
+      const now = next && list.some((s) => s.id === next.id);
+      h += `<section class="rph${now ? " now" : ""}" data-phase="${esc(p.id)}"><div class="rph-hd"><div class="l1"><span class="no">${pad(pi + 1)}</span><span class="t">${esc(p.label)}</span>${p.note ? `<span class="wn">${esc(p.note)}</span>` : ""}<span class="ct">${d}/${list.length}</span></div>`;
+      h += `<div class="l2"><span class="pbar"><i style="width:${pct(d, list.length)}%"></i></span>${list.length && !open ? `<span class="fin">완료</span>` : ""}</div></div><div class="rsteps">`;
+      for (const r of p.refs || []) h += `<details class="rph-ref"><summary>${esc(r.title)}${r.hint ? `<span class="h">${esc(r.hint)}</span>` : ""}</summary><div class="rb">${relFmt(r.body)}</div></details>`;
+      for (const s of list) h += Rel.stepHTML(s, dn.get(s.id), next && next.id === s.id, skip.has(s.id));
+      if (!list.length) h += `<div class="help" style="padding:8px 4px;color:var(--faint);font-size:12px">항목 없음</div>`;
+      if (!locked() && p.id !== "_none") h += `<button class="add" data-radd="${esc(p.id)}">+ 항목 추가</button>`;
+      h += `</div></section>`;
+    });
+    h += `</div>`;
+    host.innerHTML = h;
+    host.style.setProperty("--relhd", ($("#relhd")?.offsetHeight || 52) + "px");
+    host.scrollTop = st; host.scrollLeft = sl;
+  },
+  // 진행 탭 카드와 같은 네 줄 — ① 체크 · 번호 · 상태 ② 제목 ③ 설명 한 줄(전문은 패널) ④ 링크. 건너뜀·기한 지남은 카드 아래 지연 띠로
+  stepHTML(s, done, isNext, skipped) {
+    const c = Rel.linked(s), missing = s.card && !c, overdue = !done && s.due && s.due < todayISO();
+    const cls = ["card", "rcard", done ? "done" : "", isNext ? "next" : "", skipped || overdue ? "delayed" : "", S.ui.rsel === s.id ? "sel" : ""].filter(Boolean).join(" ");
+    const status = c ? `${TYPE_LABEL[c.type] || c.type} · ${stageLabel(c.type, displayStage(c))}` : done ? `완료${s.check?.at ? " · " + fmtAt(s.check.at) : ""}` : isNext ? "다음 차례" : "";
+    const cb = c ? `<button class="rck lk${done ? " on" : ""}" data-rgo="${esc(c.id)}" title="진행 탭 카드 「${esc(c.title)}」의 상태를 따릅니다 — 누르면 그 카드로 갑니다">${done ? "✓" : ""}</button>`
+      : `<button class="rck${done ? " on" : ""}" data-rcheck title="${locked() ? "조회 모드 — 상단 「편집」을 켜면 체크합니다" : done ? "체크 해제" : "완료로 체크"}">${done ? "✓" : ""}</button>`;
+    const line = done && s.note ? s.note : (s.how || "").split("\n")[0];
+    let h = `<div class="${cls}" data-sid="${esc(s.id)}" id="rs-${esc(s.id)}" tabindex="0"><div class="hd">${cb}<span class="tt">${esc(Rel.num(s))}</span><span class="st2" title="${esc(status)}">${esc(status)}</span><span class="act">${S.cm || S.demo ? `<button class="ab" data-rask title="Claude에게 묻기 — 이 항목에 코멘트 창을 엽니다">${ic("ask")}</button>` : ""}<button class="ab" data-rctx title="항목 컨텍스트 복사 — 채팅에 붙여 넣을 텍스트">${ic("copy")}</button></span></div><div class="ttl"><span>${esc(s.title || "(제목 없음)")}</span></div>`;
+    if (line) h += `<div class="note" title="${esc(s.how || "")}">${relFmt(line)}</div>`;
+    const chips = [];
+    if (s.owner?.kind && s.owner.kind !== "me") chips.push(`<span class="chip">${esc(OWNER_LABEL[s.owner.kind] || s.owner.kind)}${s.owner.name ? " · " + esc(s.owner.name) : ""}</span>`);
+    if (s.due && !overdue) chips.push(`<span class="chip">${esc(md(s.due))}까지</span>`);
+    if (missing) chips.push(`<span class="chip warnc" title="연결한 카드(${esc(s.card)})가 없거나 보관됐습니다 — 직접 체크합니다">카드 없음</span>`);
+    if (chips.length) h += `<div class="chips">${chips.join("")}</div>`;
+    const lnks = [];
+    if (c) lnks.push(`<button data-rgo="${esc(c.id)}" title="진행 탭에서 이 카드 보기">${ic("chr")}진행 카드</button>`);
+    if (s.ticket) { const key = s.ticket.key || linkLabel(s.ticket.url || ""), href = s.ticket.key ? (S.meta?.jiraBase ? S.meta.jiraBase.replace(/\/?$/, "/") + s.ticket.key : null) : s.ticket.url; lnks.push(href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${ic("ticket")}${esc(key)}</a>` : `<span>${ic("ticket")}${esc(key)}</span>`); }
+    for (const u of (s.links || []).slice(0, 3)) { const rb = rbRef(u); lnks.push(rb != null ? `<a href="${esc(u)}" data-rb="${esc(rb)}">${ic("doc")}${esc(Doc.label(rb))}</a>` : `<a href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}">${ic("ext")}${esc(linkLabel(u))}</a>`); }
+    if (lnks.length) h += `<div class="lnks">${lnks.join("")}</div>`;
+    const dl = [skipped ? "뒤 항목이 먼저 체크됐습니다" : "", overdue ? `기한 ${md(s.due)} 지남` : ""].filter(Boolean);
+    if (dl.length) h += `<div class="delay"><span class="k">${skipped ? "건너뜀" : "지연"}</span><span>${esc(dl.join(" · "))}</span></div>`;
+    return h + `</div>`;
+  },
+  panel() {
+    const p = $("#rpanel"), v = $("#relview"), id = S.ui.rsel, s = id && S.rel.steps.get(id);
+    if (!s || s.archived) { if (S.ui.rsel) S.ui.rsel = null; v.classList.remove("panel-open"); p.innerHTML = ""; p.dataset.id = ""; return; }
+    v.classList.add("panel-open");
+    const active = document.activeElement; if (active && p.contains(active) && active.name && p.dataset.id === id) return;   // 타이핑 중이면 갈지 않는다
+    p.dataset.id = id;
+    const ro = locked() ? "disabled" : "", c = Rel.linked(s);
+    const phases = (S.rel.meta?.phases || []).map((x) => [x.id, x.label]);
+    const cards = [...S.cards.values()].filter((x) => !x.archived).sort((a, b) => (a.title || "").localeCompare(b.title || "", "ko")).map((x) => [x.id, `${TYPE_LABEL[x.type] || x.type} · ${x.title}`]);
+    const list = Rel.steps(s.phase), i = list.findIndex((x) => x.id === id);
+    let h = Panel.head(`릴리스 항목 ${esc(Rel.num(s))}`, `<span class="lab" style="flex:0;color:var(--faint)">${esc(id)}</span>`);
+    h += `<div class="body"><form id="rf" autocomplete="off">
+      <div class="f"><label>제목</label><input name="title" value="${esc(s.title)}" ${ro}></div>
+      <div class="f"><div class="row2"><div><label>단계</label>${Panel.sel("phase", phases, s.phase, ro)}</div><div><label>기한</label><input type="date" name="due" value="${esc(s.due || "")}" ${ro}></div></div></div>
+      <div class="f"><div class="row2"><div><label>담당</label>${Panel.sel("ownerKind", Object.entries(OWNER_LABEL), s.owner?.kind || "me", ro)}</div><div><label>이름</label><input name="ownerName" value="${esc(s.owner?.name || "")}" placeholder="사람·팀 이름" ${ro}></div></div></div>
+      <div class="f"><label>하는 법 (명령·확인할 것)</label>${ro ? `<div class="rp-how">${relFmt(s.how) || "—"}</div>` : `<textarea name="how" style="min-height:120px">${esc(s.how || "")}</textarea>`}<div class="help">\`백틱\`으로 감싼 부분은 코드로 보입니다</div></div>
+      <div class="f"><label>진행 탭 카드 연결</label>${Panel.sel("card", [["", "— 연결 안 함 (직접 체크)"], ...cards], s.card || "", ro)}<div class="help">연결하면 체크는 그 카드가 완료인지를 따릅니다 — 같은 상태를 두 곳에 적지 않습니다</div></div>
+      <div class="f"><label>티켓</label><input name="ticket" value="${esc(s.ticket?.key || s.ticket?.url || "")}" placeholder="CR-1234 또는 URL" ${ro}></div>
+      <div class="f"><label>링크 (한 줄에 하나)</label><textarea name="links" ${ro}>${esc((s.links || []).join("\n"))}</textarea></div>
+      <div class="f"><label>결과 메모</label><textarea name="note" placeholder="확인한 값·특이사항" ${ro}>${esc(s.note || "")}</textarea></div>
+      <div class="f"><div class="help mono">${c ? `카드 상태를 따름 · ${esc(stageLabel(c.type, displayStage(c)))}` : s.check?.done ? `체크 ${esc(fmtAt(s.check.at))}${s.check.by === S.rel.me ? " · 나" : s.check.by ? " · 다른 편집자" : ""}` : "미체크"} · 수정 ${esc(fmtAt(s.updatedAt))}</div></div>
+      <div class="btns">${locked() ? "" : `<button type="button" class="btn" data-rmove="-1" ${i <= 0 ? "disabled" : ""}>↑ 앞으로</button><button type="button" class="btn" data-rmove="1" ${i >= list.length - 1 ? "disabled" : ""}>↓ 뒤로</button><button type="button" class="btn bad" data-rarch="1">보관</button>`}<button type="button" class="btn" data-close="1">닫기</button></div>
+    </form></div>`;
+    p.innerHTML = h;
+  },
+  open(id) { S.ui.rsel = id; $("#rpanel").dataset.id = ""; Rel.render(); },
+  close() { S.ui.rsel = null; Rel.render(); },
+  async save(id, patch) {
+    if (locked()) { toast(S.ui.readOnly ? "읽기 전용입니다" : "조회 모드입니다 — 상단 「편집」을 켜세요", true); Rel.render(); return false; }
+    const s = S.rel.steps.get(id); if (!s) return false;
+    const prev = clone(s); patch = { ...patch, updatedAt: nowISO() }; deepMerge(s, patch); Rel.render();
+    if (S.demo) return true;
+    try { await S.db.doc("release/" + id).update(patch); return true; }
+    catch (e) { S.rel.steps.set(id, prev); Store.fail(e); Rel.render(); return false; }
+  },
+  toggle(id) {
+    const s = S.rel.steps.get(id); if (!s) return;
+    if (Rel.linked(s)) return toast("진행 탭 카드 상태를 따르는 항목입니다 — 카드에서 바꾸세요");
+    const on = !s.check?.done;
+    if (on && !locked()) { const all = Rel.ordered(), i = all.findIndex((x) => x.id === id), left = all.slice(0, i).filter((x) => !Rel.done(x)).length; if (left) toast(`앞 항목 ${left}건이 아직 남았습니다 — 건너뛴 항목은 빨간 테두리로 남습니다`, true); }
+    Rel.save(id, { check: on ? { done: true, at: nowISO(), by: S.rel.me || null } : { done: false, at: null, by: null } });
+  },
+  async add(phase) {
+    if (locked()) return;
+    const last = Rel.steps(phase).at(-1), id = "s_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const s = { id, phase, ord: between(last?.ord || null, null), title: "새 항목", how: "", owner: { kind: "me", name: "" }, due: null, card: null, ticket: null, links: [], note: "", check: { done: false, at: null, by: null }, archived: false, createdAt: nowISO(), updatedAt: nowISO() };
+    S.rel.steps.set(id, s); Rel.open(id);
+    const i = $("#rpanel input[name=title]"); if (i) { i.focus(); i.select(); }
+    if (S.demo) return;
+    try { await S.db.collection("release").doc(id).set(s); } catch (e) { S.rel.steps.delete(id); S.ui.rsel = null; Store.fail(e); Rel.render(); }
+  },
+  move(id, dir) {
+    const s = S.rel.steps.get(id); if (!s) return;
+    const list = Rel.steps(s.phase), i = list.findIndex((x) => x.id === id), j = i + dir; if (j < 0 || j >= list.length) return;
+    let ord; try { ord = dir < 0 ? between(list[j - 1]?.ord || null, list[j].ord) : between(list[j].ord, list[j + 1]?.ord || null); } catch (_) { return toast("순서 키가 겹쳐 옮길 수 없습니다 — 에이전트에게 순서 재부여를 요청하세요", true); }
+    $("#rpanel").dataset.id = ""; Rel.save(id, { ord });
+  },
+  onChange(e) {
+    const f = e.target.closest("form#rf"); if (!f) return;
+    const id = $("#rpanel").dataset.id, s = S.rel.steps.get(id); if (!s) return;
+    const name = e.target.name, v = e.target.value, patch = {};
+    if (name === "title") patch.title = v.trim() || s.title;
+    else if (name === "phase") patch.phase = v, patch.ord = between(Rel.steps(v).filter((x) => x.id !== id).at(-1)?.ord || null, null);
+    else if (name === "due") patch.due = v || null;
+    else if (name === "ownerKind") patch.owner = { kind: v, name: s.owner?.name || "" };
+    else if (name === "ownerName") patch.owner = { kind: s.owner?.kind || "me", name: v.trim() };
+    else if (name === "how") patch.how = v;
+    else if (name === "card") patch.card = v || null;
+    else if (name === "ticket") { const t = v.trim(); patch.ticket = !t ? null : /^https?:\/\//.test(t) ? { url: t } : { key: t.toUpperCase() }; }
+    else if (name === "links") patch.links = v.split("\n").map((x) => x.trim()).filter(Boolean);
+    else if (name === "note") patch.note = v;
+    else return;
+    if (name === "phase" || name === "card") $("#rpanel").dataset.id = "";
+    Rel.save(id, patch);
+  },
+};
+function relContext(s) {
+  const c = Rel.linked(s), ph = (S.rel.meta?.phases || []).find((p) => p.id === s.phase), L = [];
+  L.push(`[릴리스 항목] ${Rel.num(s)} ${s.title || "(제목 없음)"}`);
+  L.push(`보드: ${document.title} · 항목 id: release/${s.id}${S.rel.meta?.title ? " · 릴리스: " + S.rel.meta.title : ""}`);
+  L.push(`단계: ${ph?.label || s.phase} · 상태: ${c ? `${TYPE_LABEL[c.type] || c.type} 카드(${c.id}) · ${stageLabel(c.type, displayStage(c))}` : Rel.done(s) ? `완료 ${fmtAt(s.check?.at)}` : "미완료"}`);
+  if (s.owner?.kind && s.owner.kind !== "me") L.push(`담당: ${OWNER_LABEL[s.owner.kind] || s.owner.kind}${s.owner.name ? " " + s.owner.name : ""}`);
+  if (s.due) L.push(`기한: ${md(s.due)}`);
+  if (s.ticket) L.push(`티켓: ${s.ticket.key || s.ticket.url}`);
+  if ((s.links || []).length) L.push(`링크: ${s.links.join(" ")}`);
+  if (s.how) L.push(`하는 법: ${s.how}`);
+  if (s.note) L.push(`결과 메모: ${s.note}`);
+  return L.join("\n");
+}
+function gotoCard(id) {
+  setTab("board");
+  requestAnimationFrame(() => {
+    const el = $(`#grid .card[data-id="${CSS.escape(id)}"]`);
+    if (!el) return toast("카드가 접힌 열·행이나 필터 안에 있습니다", true);
+    el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  });
+}
+$("#rmain").addEventListener("click", (e) => {
+  const rl = e.target.closest("a[data-rb]"); if (rl) { e.preventDefault(); setTab("doc", rl.dataset.rb); return; }
+  if (e.target.closest("a, summary")) return;
+  const cb = e.target.closest("[data-rcheck]"); if (cb) { Rel.toggle(cb.closest(".rcard").dataset.sid); return; }
+  const ab = e.target.closest(".ab"); if (ab) { const el = ab.closest(".rcard"); if (ab.dataset.rask !== undefined) askClaude(el); else { const st = S.rel.steps.get(el.dataset.sid); if (st) copyText(relContext(st), "항목 컨텍스트를 복사했습니다 — 채팅에 붙여 넣으세요"); } return; }
+  const go = e.target.closest("[data-rgo]"); if (go) { gotoCard(go.dataset.rgo); return; }
+  const add = e.target.closest("[data-radd]"); if (add) { Rel.add(add.dataset.radd); return; }
+  const st = e.target.closest(".rcard"); if (st) { const id = st.dataset.sid; S.ui.rsel === id ? Rel.close() : Rel.open(id); }
+});
+$("#rpanel").addEventListener("change", (e) => Rel.onChange(e));
+$("#rpanel").addEventListener("submit", (e) => e.preventDefault());
+$("#rpanel").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const id = $("#rpanel").dataset.id;
+  if (b.dataset.close) return Rel.close();
+  if (b.dataset.rmove) return Rel.move(id, Number(b.dataset.rmove));
+  if (b.dataset.rarch) { Rel.save(id, { archived: true }); S.ui.rsel = null; Rel.render(); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.ui.tab === "rel" && S.ui.rsel) Rel.close(); });
 
 // ───────────────────────── DnD (pointer) ─────────────────────────
 const DnD = (() => {
@@ -1150,7 +1439,24 @@ const DEMO = (() => {
       { id: "a1", hash: "a1", html: `<section id="a1"><h2>A1 남은 일</h2><ol><li><b>#813 재리뷰 → 머지</b> — 통합 브랜치를 먼저 흘린다. 근거는 <a href="#c-2">결정 #2</a></li><li><b>환불 열기</b> — #813 머지를 기다리지 않는다</li></ol>${"<p>이어받기 서사 문단.</p>".repeat(12)}</section>` },
       { id: "c", hash: "c", html: `<section id="c"><h2>C 결정 로그</h2><details><summary>결정 로그 (#1~#3)</summary><ul><li id="c-1"><b>#1</b> 슬러그로 시작한다</li><li id="c-2"><b>#2</b> 스택 PR은 merge 커밋으로 흘린다 — squash하면 상위 PR diff가 오염된다</li><li id="c-3"><b>#3</b> 재채번은 V50·V51</li></ul></details>${"<p>회고 백로그.</p>".repeat(20)}</section>` },
     ] };
-  return { runbook, meta: { schemaVersion: 1, title: "데모 · 파트너 채널 연동", ticket: "DEMO-0000", repo: "example/repo", branchPrefix: "feature/", rows, cols, updatedAt: "2026-09-19T00:00:00Z" }, sync: { at: "2026-09-19T00:00:00Z", by: "agent", probed: 5, failed: 1, schemaVersion: 1 }, cards };
+  // 릴리스 샘플 — c7(prod 시크릿 카드)·c8(egress, 완료)에 연결된 항목은 카드 상태를 따른다
+  const st = (id, phase, ord, title, extra = {}) => ({ id, phase, ord, title, how: "", owner: { kind: "me", name: "" }, due: null, card: null, ticket: null, links: [], note: "", check: { done: false, at: null, by: null }, archived: false, createdAt: "2026-09-20T01:00:00Z", updatedAt: "2026-09-20T01:00:00Z", ...extra });
+  const ck = (at) => ({ done: true, at, by: "u_demo" });
+  const release = { meta: { schemaVersion: 1, label: "릴리스", title: "운영 첫 배포", date: plus(24), time: "10:00", ticket: { key: "CR-0001" }, links: [],
+    phases: [{ id: "pre", label: "배포 전 준비", note: "배포 전 영업일까지" }, { id: "day", label: "배포 당일", note: "오전 · 직렬", refs: [{ title: "롤백", hint: "문제가 생기면", body: "직전 앱 태그를 배포의 역순으로 재배포한다.\n폴링(batch)·admin은 마지막까지 남긴다 — 결제창을 연 고객의 돈을 닫을 경로가 그 둘뿐이다." }] }, { id: "post", label: "배포 이후", note: "오픈까지" }],
+    updatedAt: "2026-09-20T01:00:00Z" },
+    steps: [
+      st("s1", "pre", "V", "egress IP 등록", { card: "c8", owner: { kind: "person", name: "인프라" } }),
+      st("s2", "pre", "k", "운영 DDL 반영 (DBREQ)", { ticket: { key: "DBREQ-0001" }, check: ck("2026-09-21T05:00:00Z"), note: "두 테이블 생성 확인" }),
+      st("s3", "pre", "s", "prod 시크릿 등록", { card: "c7", how: "service 6종 · admin 5종 + `PARTNER_REQUIRE_LIVE=true`\n값은 폼에 직접 — 티켓 본문에 적지 않는다" }),
+      st("s4", "pre", "w", "릴리스 후보 조립 · CR Release steps 직렬 기재", { ticket: { key: "CR-0001" } }),
+      st("s5", "day", "V", "admin-server 배포 → Ready 확인", { how: "기동 로그에 `require-live=true but blank`가 없어야 한다" }),
+      st("s6", "day", "k", "service-server 배포 → Ready 확인", { how: "crash-loop면 시크릿 누락 — 고객 API 전체가 멈춘 상태다. 즉시 롤백" }),
+      st("s7", "day", "s", "스케줄 켜기 · 첫 회차 확인", { owner: { kind: "agent", name: "" } }),
+      st("s8", "post", "V", "30분 모니터링", { links: ["#runbook/a1"] }),
+      st("s9", "post", "k", "CR 티켓 완료 전환 · 공지", { due: plus(25) }),
+    ] };
+  return { runbook, release, meta: { schemaVersion: 1, title: "데모 · 파트너 채널 연동", ticket: "DEMO-0000", repo: "example/repo", branchPrefix: "feature/", rows, cols, updatedAt: "2026-09-19T00:00:00Z" }, sync: { at: "2026-09-19T00:00:00Z", by: "agent", probed: 5, failed: 1, schemaVersion: 1 }, cards };
 })();
 
 Store.init();

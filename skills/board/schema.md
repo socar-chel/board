@@ -13,6 +13,8 @@
 | `cards/<id>` | 카드 수 | 페이지(위치·단계·핵심 필드) · 에이전트(`probe`, 사용자 지시 시 핵심 필드) | 카드 |
 | `meta/runbook` | 0~1 | 에이전트만(`runbook`) | 런북 머리말·꼬리말·CSS·절 순서 |
 | `runbook/<절id>` | 절 수 | 에이전트만(`runbook`) | 런북 절 본문 |
+| `meta/release` | 0~1 | 에이전트만(`release`) | 릴리스 제목·배포일·티켓·단계·참고 |
+| `release/<항목id>` | 항목 수 | 페이지(체크·항목 편집) · 에이전트(`release` 생성, 사용자 지시 시 수정) | 릴리스 체크 항목 |
 
 문서 상한 5,000 · 문서당 256KiB. 카드만 문서이므로 상한과 무관하다. 실측 이력은 DB에 쌓지 않는다(`board.json`의 git 히스토리).
 
@@ -125,6 +127,39 @@ probe.ticket     { key|url, status, assignee, title, at, ok, err }
 - 카드 → 런북 딥링크는 `links[]`의 `#runbook/<절id>` · `#runbook/<절id>-<N>`. 스키마 필드를 따로 두지 않는다.
 - `board.json` 스냅샷에는 런북이 들어가지 않는다 — 로컬 런북 파일이 정본이라 되돌릴 때는 그 파일을 다시 게시한다.
 
+## 릴리스 — `meta/release` · `release/<항목id>`
+
+배포 한 번을 **단계(배포 전 준비 · 배포 당일 · 배포 이후) × 순서 있는 체크 항목**으로 펼친 것이다. `meta/release`가 있을 때만 「릴리스」 탭이 보인다.
+진행 탭이 "무엇이 어디까지 왔나"라면 릴리스 탭은 "배포하는 날 무엇을 어떤 순서로 하나"다 — 런북 문서의 절차를 체크리스트로 옮긴 실행판이다.
+
+```json
+// meta/release — 에이전트가 쓴다
+{ "schemaVersion": 1, "label": "릴리스", "title": "10/6 운영 배포", "date": "2026-10-06", "time": "10:00",
+  "ticket": { "key": "CR-1234" }, "links": ["https://…"],
+  "phases": [{ "id": "pre", "label": "배포 전 준비", "note": "10/2까지" },
+             { "id": "day", "label": "배포 당일", "note": "10/6(화) 오전",
+               "refs": [{ "title": "롤백", "hint": "문제가 생기면", "body": "여러 줄 텍스트 · `백틱`은 코드" }] },   // 그 단계 목록 맨 위 접이식
+             { "id": "post", "label": "배포 이후", "note": "" }],
+  "refs": [], "updatedAt": "…" }   // 단계에 묶이지 않는 참고 — 머리 아래 전폭 접이식(가급적 단계 refs로)
+// release/s_k3x9a1b2 — 페이지와 에이전트가 함께 쓴다
+{ "id": "s_k3x9a1b2", "phase": "day", "ord": "V", "title": "service-server 배포 → Ready 확인",
+  "how": "crash-loop면 시크릿 누락 — 즉시 롤백\n`kubectl rollout status …`",   // 하는 법. 여러 줄, `백틱`은 코드
+  "owner": { "kind": "me", "name": "" }, "due": null, "time": null,
+  "card": null,                          // 진행 탭 카드 id. 있으면 체크 = 그 카드의 완료 여부(직접 체크 불가)
+  "ticket": { "key": "INFRA-5678" }, "links": ["#runbook/b6"],
+  "note": "",                            // 결과 메모 — 확인한 값·특이사항
+  "check": { "done": false, "at": null, "by": null },   // by는 user.id() — 이름을 저장하지 않는다
+  "archived": false, "createdAt": "…", "updatedAt": "…" }
+```
+
+- **번호는 저장하지 않는다** — 페이지가 `단계 순번-항목 순번`(`2-03`)으로 매긴다. 순서는 `ord`(카드와 같은 분수 인덱스)이고 단계 안에서만 비교한다.
+- **카드 연결(`card`)이 정본 회피 장치다.** DBREQ·시크릿처럼 진행 탭에 이미 카드가 있는 일은 항목을 만들되 `card`만 걸고 체크하지 않는다 — 같은 상태를 두 곳에 적으면 반드시 어긋난다. 카드가 없거나 보관되면 「카드 없음」 경고가 뜨고 직접 체크로 돌아간다.
+- 순서를 건너뛰어 체크해도 막지 않는다(현장 순서는 바뀐다). 앞에 남은 항목은 카드 아래 「건너뜀」 띠로 남고, 첫 미완료 항목은 「다음 차례」로 강조된다.
+- 참고(`refs`)는 체크할 일이 아니라 펼쳐 볼 것이다. 쓰이는 단계에 붙인다 — 롤백은 `day` 단계 맨 위. 순서의 이유처럼 배포 중에 안 보는 설명은 런북 문서에 둔다.
+- 단계 id가 `phases`에 없는 항목은 맨 뒤 「단계 없음」 열에 모인다(사라지지 않게).
+- `board.json` 스냅샷과 `restore`는 릴리스를 다루지 않는다 — 사람이 체크한 기록이라 되돌릴 대상이 아니다.
+- 항목 하나는 "끝났다/안 끝났다"가 갈리는 행동 하나다. 확인 절차가 길면 `how`에 적고 항목을 쪼개지 않는다. 반대로 "배포하고 확인"처럼 사이에 기다림이 있는 둘은 두 항목이다.
+
 ## 쓰기 주체 규칙 (last-writer-wins 대응의 핵심)
 
 `update`는 최상위 키 단위로 병합되고 중첩 객체는 재귀 병합, **배열은 통째 교체**된다. 그래서:
@@ -139,6 +174,9 @@ probe.ticket     { key|url, status, assignee, title, at, ok, err }
 6. 배열 필드(`links` `blockedBy` `rows` `cols`)를 에이전트가 고칠 때는 최신 값을 읽은 뒤 전체를 보낸다.
 7. **런북 문서(`meta/runbook`·`runbook/*`)는 에이전트만 쓰고 항상 `set`(전체 교체)이다** — 필드를 나눠 쓰는 다른 주체가 없다.
    동시 게시는 문서 버전(`if_version`)과 절 hash(게시 기록 대조) 두 겹으로 막는다.
+8. **`meta/release`는 에이전트만 쓴다**(단계·제목·배포일·참고). **`release/*` 항목은 페이지와 에이전트가 함께 쓴다** — 페이지는 체크(`check`)와
+   항목 편집(`title` `phase` `ord` `how` `owner` `due` `card` `ticket` `links` `note` `archived`)을, 에이전트는 생성(`set` 한 번, id `s_` + base36(ms) + 난수 4자)과
+   채팅으로 시킨 수정을 `update` + `if_version`으로 쓴다. 사람이 체크한 `check`를 에이전트가 되돌리지 않는다.
 
 ## 단계 어휘
 
