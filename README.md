@@ -14,6 +14,8 @@
 npx skills add socar-chel/board -g
 ```
 
+설치본은 그 시점의 복사본이라 리포가 바뀌어도 따라오지 않는다 — `npx skills update board -g`로 갱신한다.
+
 설치 후 Claude Code에서:
 
 ```
